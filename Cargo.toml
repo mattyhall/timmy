@@ -7,3 +7,4 @@ authors = ["Matthew Hall <matthew@quickbeam.me.uk>"]
 rusqlite = { version = "0.7.3", features = ["chrono"] }
 clap = "2.10.0"
 chrono = "0.2"
+log = "0.3.6"

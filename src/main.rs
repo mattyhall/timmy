@@ -1,14 +1,30 @@
+#[macro_use]
+extern crate log;
+
 extern crate clap;
 extern crate rusqlite;
 extern crate chrono;
 
-use std::{fs, env, io};
+use std::{fs, env, io,};
 use std::path::Path;
+use std::convert::From;
 use clap::{Arg, App, SubCommand};
 use rusqlite::Connection;
 use chrono::*;
 
-fn open_connection() -> Result<Connection, rusqlite::Error> {
+#[derive(Debug)]
+enum Error {
+    ProjectNotFound(String),
+    SqliteError(rusqlite::Error),
+}
+
+impl From<rusqlite::Error> for Error {
+    fn from(e: rusqlite::Error) -> Error {
+        Error::SqliteError(e)
+    }
+}
+
+fn open_connection() -> Result<Connection, Error> {
     let home = env::var("HOME").unwrap_or("./".into());
     let path = Path::new(&home).join(".timmy");
     if !path.exists() {
@@ -37,7 +53,7 @@ fn open_connection() -> Result<Connection, rusqlite::Error> {
 }
 
 
-fn create_project(conn: &mut Connection, name: &str, customer: Option<&str>, tags: &str) -> Result<(), rusqlite::Error> {
+fn create_project(conn: &mut Connection, name: &str, customer: Option<&str>, tags: &str) -> Result<(), Error> {
     let tx = try!(conn.transaction());
     let proj_id = try!(tx.execute("INSERT INTO projects(name, customer) VALUES (?,?)", &[&name, &customer]));
     if tags != "" {
@@ -45,12 +61,17 @@ fn create_project(conn: &mut Connection, name: &str, customer: Option<&str>, tag
             try!(tx.execute("INSERT INTO tags_projects_join VALUES (?, ?)", &[&tag, &proj_id]));
         }
     }
-    tx.commit()
+    try!(tx.commit());
+    Ok(())
 }
 
-fn track(conn: &mut Connection, name: &str) -> Result<(), rusqlite::Error> {
+fn track(conn: &mut Connection, name: &str) -> Result<(), Error> {
     let start = Local::now();
-    let proj_id: i32 = try!(conn.query_row("SELECT id FROM projects WHERE name=?", &[&name], |row| row.get(0)));
+    let proj_id: i32 = match conn.query_row("SELECT id FROM projects WHERE name=?", &[&name], |row| row.get(0)) {
+        Ok(id) => id,
+        Err(rusqlite::Error::QueryReturnedNoRows) => return Err(Error::ProjectNotFound(name.into())),
+        Err(e) => return Err(Error::from(e))
+    };
     println!("When you are finished with the task press ENTER");
 
     let mut s = String::new();
@@ -89,9 +110,19 @@ fn main() {
                          .required(true)))
         .get_matches();
 
-    if let Some(matches) = matches.subcommand_matches("new") {
-        create_project(&mut conn, matches.value_of("NAME").unwrap(), matches.value_of("customer"), matches.value_of("tags").unwrap_or("".into())).unwrap();
+    let res = if let Some(matches) = matches.subcommand_matches("new") {
+        create_project(&mut conn, matches.value_of("NAME").unwrap(), matches.value_of("customer"), matches.value_of("tags").unwrap_or("".into()))
     } else if let Some(matches) = matches.subcommand_matches("track") {
-        track(&mut conn, matches.value_of("PROJECT").unwrap()).unwrap();
+        track(&mut conn, matches.value_of("PROJECT").unwrap())
+    } else {
+        unreachable!();
+    };
+    match res {
+        Ok(()) => {},
+        Err(Error::ProjectNotFound(p)) => println!("Project {} not found", p),
+        Err(Error::SqliteError(e)) => {
+            println!("There was a problem with the database");
+            error!("{:?}", e);
+        }
     }
 }
