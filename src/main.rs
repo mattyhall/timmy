@@ -1,10 +1,12 @@
 extern crate clap;
 extern crate rusqlite;
+extern crate chrono;
 
-use std::{fs, env};
+use std::{fs, env, io};
 use std::path::Path;
 use clap::{Arg, App, SubCommand};
 use rusqlite::Connection;
+use chrono::*;
 
 fn open_connection() -> Result<Connection, rusqlite::Error> {
     let home = env::var("HOME").unwrap_or("./".into());
@@ -15,14 +17,22 @@ fn open_connection() -> Result<Connection, rusqlite::Error> {
     let path = path.join("db.sqlite3");
     let conn = try!(Connection::open(path));
 
-    try!(conn.execute_batch("CREATE TABLE IF NOT EXISTS projects (\
-                               id       INTEGER PRIMARY KEY, \
-                               name     TEXT NOT NULL UNIQUE, \
-                               customer TEXT);\
-                             CREATE TABLE IF NOT EXISTS tags_projects_join (\
+    try!(conn.execute_batch("CREATE TABLE IF NOT EXISTS projects (
+                               id       INTEGER PRIMARY KEY,
+                               name     TEXT NOT NULL UNIQUE,
+                               customer TEXT
+                             );
+                             CREATE TABLE IF NOT EXISTS tags_projects_join (
                                tag_name   TEXT NOT NULL,
                                project_id INTEGER NOT NULL,
-                               UNIQUE(tag_name, project_id));"));
+                               UNIQUE(tag_name, project_id)
+                             );
+                             CREATE TABLE IF NOT EXISTS timeperiod (
+                               id           INTEGER PRIMARY KEY,
+                               project_id   INTEGER NOT NULL,
+                               start        DATETIME NOT NULL,
+                               end          DATETIME NOT NULL
+                             );"));
     return Ok(conn);
 }
 
@@ -36,6 +46,19 @@ fn create_project(conn: &mut Connection, name: &str, customer: Option<&str>, tag
         }
     }
     tx.commit()
+}
+
+fn track(conn: &mut Connection, name: &str) -> Result<(), rusqlite::Error> {
+    let start = Local::now();
+    let proj_id: i32 = try!(conn.query_row("SELECT id FROM projects WHERE name=?", &[&name], |row| row.get(0)));
+    println!("When you are finished with the task press ENTER");
+
+    let mut s = String::new();
+    io::stdin().read_line(&mut s).unwrap();
+
+    let end = Local::now();
+    try!(conn.execute("INSERT INTO timeperiod(project_id, start, end) VALUES (?,?,?)", &[&proj_id, &start, &end]));
+    Ok(())
 }
 
 fn main() {
@@ -58,10 +81,17 @@ fn main() {
                              .short("t")
                              .long("tags")
                              .help("comma separated list of tags")
-                             .takes_value(true))).get_matches();
+                             .takes_value(true)))
+        .subcommand(SubCommand::with_name("track")
+                    .about("Start tracking a time period")
+                    .arg(Arg::with_name("PROJECT")
+                         .help("the project to start tracking time for")
+                         .required(true)))
+        .get_matches();
 
     if let Some(matches) = matches.subcommand_matches("new") {
         create_project(&mut conn, matches.value_of("NAME").unwrap(), matches.value_of("customer"), matches.value_of("tags").unwrap_or("".into())).unwrap();
+    } else if let Some(matches) = matches.subcommand_matches("track") {
+        track(&mut conn, matches.value_of("PROJECT").unwrap()).unwrap();
     }
-
 }

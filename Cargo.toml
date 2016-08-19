@@ -4,5 +4,6 @@ version = "0.1.0"
 authors = ["Matthew Hall <matthew@quickbeam.me.uk>"]
 
 [dependencies]
-rusqlite = "0.7.3"
+rusqlite = { version = "0.7.3", features = ["chrono"] }
 clap = "2.10.0"
+chrono = "0.2"
