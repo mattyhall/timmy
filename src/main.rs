@@ -46,7 +46,7 @@ fn open_connection() -> Result<Connection, Error> {
                                project_id INTEGER NOT NULL,
                                UNIQUE(tag_name, project_id)
                              );
-                             CREATE TABLE IF NOT EXISTS timeperiod (
+                             CREATE TABLE IF NOT EXISTS timeperiods (
                                id           INTEGER PRIMARY KEY,
                                project_id   INTEGER NOT NULL,
                                start        DATETIME NOT NULL,
@@ -90,7 +90,7 @@ fn track(conn: &mut Connection, name: &str) -> Result<(), Error> {
     io::stdin().read_line(&mut s).unwrap();
 
     let end = Local::now();
-    try!(conn.execute("INSERT INTO timeperiod(project_id, start, end) VALUES (?,?,?)", &[&proj_id, &start, &end]));
+    try!(conn.execute("INSERT INTO timeperiods(project_id, start, end) VALUES (?,?,?)", &[&proj_id, &start, &end]));
     Ok(())
 }
 
@@ -101,7 +101,7 @@ fn git(conn: &mut Connection, project: &str) -> Result<(), Error> {
     try!(tx.execute("DELETE FROM commits WHERE project_id=?", &[&proj_id]));
     // tx.prepare borrows tx so to call commit stmnt must be dropped
     {
-        let mut stmnt = try!(tx.prepare("SELECT id, start, end FROM timeperiod WHERE project_id=?"));
+        let mut stmnt = try!(tx.prepare("SELECT id, start, end FROM timeperiods WHERE project_id=?"));
         let mut rows = try!(stmnt.query(&[&proj_id]));
         while let Some(row) = rows.next() {
             let row = try!(row);
