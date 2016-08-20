@@ -49,6 +49,7 @@ fn open_connection() -> Result<Connection, Error> {
                              CREATE TABLE IF NOT EXISTS timeperiods (
                                id           INTEGER PRIMARY KEY,
                                project_id   INTEGER NOT NULL,
+                               description  TEXT,
                                start        DATETIME NOT NULL,
                                end          DATETIME NOT NULL
                              );
@@ -81,7 +82,7 @@ fn find_project(conn: &mut Connection, name: &str) -> Result<i32, Error> {
     }
 }
 
-fn track(conn: &mut Connection, name: &str) -> Result<(), Error> {
+fn track(conn: &mut Connection, name: &str, description: Option<&str>) -> Result<(), Error> {
     let proj_id = try!(find_project(conn, name));
     let start = Local::now();
     println!("When you are finished with the task press ENTER");
@@ -90,7 +91,7 @@ fn track(conn: &mut Connection, name: &str) -> Result<(), Error> {
     io::stdin().read_line(&mut s).unwrap();
 
     let end = Local::now();
-    try!(conn.execute("INSERT INTO timeperiods(project_id, start, end) VALUES (?,?,?)", &[&proj_id, &start, &end]));
+    try!(conn.execute("INSERT INTO timeperiods(project_id, start, end, description) VALUES (?,?,?,?)", &[&proj_id, &start, &end, &description]));
     Ok(())
 }
 
@@ -170,7 +171,12 @@ fn main() {
                     .about("Start tracking a time period")
                     .arg(Arg::with_name("PROJECT")
                          .help("the project to start tracking time for")
-                         .required(true)))
+                         .required(true))
+                    .arg(Arg::with_name("description")
+                         .short("d")
+                         .long("description")
+                         .help("a description of what you will do in the timeperiod")
+                         .takes_value(true)))
         .subcommand(SubCommand::with_name("git")
                     .about("go through each time period and store the commits that happened during that time")
                     .arg(Arg::with_name("PROJECT")
@@ -181,7 +187,7 @@ fn main() {
     let res = if let Some(matches) = matches.subcommand_matches("new") {
         create_project(&mut conn, matches.value_of("NAME").unwrap(), matches.value_of("customer"), matches.value_of("tags").unwrap_or("".into()))
     } else if let Some(matches) = matches.subcommand_matches("track") {
-        track(&mut conn, matches.value_of("PROJECT").unwrap())
+        track(&mut conn, matches.value_of("PROJECT").unwrap(), matches.value_of("description"))
     } else if let Some(matches) = matches.subcommand_matches("git") {
         git(&mut conn, matches.value_of("PROJECT").unwrap())
     } else {
