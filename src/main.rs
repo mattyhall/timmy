@@ -175,7 +175,18 @@ fn print_border(max_lengths: &[usize], top: bool, joined: bool) {
     println!("");
 }
 
-fn print_table<T>(headers: &[&str], rows: &[T]) where T: AsRef<[String]> {
+fn print_row<T>(max_lengths: &[usize], row: T) where T: AsRef<[String]> {
+    print!("│");
+    for (i, len) in max_lengths.iter().enumerate() {
+        let ref cell = row.as_ref()[i];
+        let to_pad = len - cell.len();
+        let spaces: String = iter::repeat(" ").take(to_pad).collect();
+        print!(" {}{} │", cell, spaces);
+    }
+    println!("");
+}
+
+fn print_table<T>(headers: &[String], rows: &[T]) where T: AsRef<[String]> {
     let max_lengths: Vec<usize> = headers.iter().enumerate().map(|(i,v)| {
         let lengths = rows.iter().map(|row| row.as_ref()[i].len());
         cmp::max(lengths.max().unwrap(), v.len())
@@ -183,25 +194,11 @@ fn print_table<T>(headers: &[&str], rows: &[T]) where T: AsRef<[String]> {
 
 
     print_border(&max_lengths, true, true);
-    print!("│");
-    for (i, len) in max_lengths.iter().enumerate() {
-        let header = headers[i];
-        let to_pad = len - header.len();
-        let spaces: String = iter::repeat(" ").take(to_pad).collect();
-        print!(" {}{} │", header, spaces);
-    }
-    println!("");
+    print_row(&max_lengths, headers);
     print_border(&max_lengths, false, true);
 
     for row in rows {
-        print!("│");
-        for (i, len) in max_lengths.iter().enumerate() {
-            let ref cell = row.as_ref()[i];
-            let to_pad = len - cell.len();
-            let spaces: String = iter::repeat(" ").take(to_pad).collect();
-            print!(" {}{} │", cell, spaces);
-        }
-        println!("");
+        print_row(&max_lengths, row);
     }
     print_border(&max_lengths, false, false);
 }
@@ -210,7 +207,7 @@ fn projects(conn: &mut Connection) -> Result<(), Error> {
     let mut projects_stmnt = conn.prepare("SELECT id, name, customer FROM projects;")?;
     let rows = projects_stmnt.query_map(&[], |row| (row.get(0), row.get(1), row.get(2)))?;
     let mut tags_stmnt = conn.prepare("SELECT tag_name FROM tags_projects_join WHERE project_id=?")?;
-    let headers = ["Id", "Name", "Customer", "Tags"];
+    let headers = ["Id".into(), "Name".into(), "Customer".into(), "Tags".into()];
     let mut table = vec![];
     for row in rows {
         let project: (i32, String, Option<String>) = row?;
