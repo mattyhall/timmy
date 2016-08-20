@@ -8,7 +8,7 @@ extern crate clap;
 extern crate rusqlite;
 extern crate chrono;
 
-use std::{fs, env, io,};
+use std::{fs, env, io, cmp, iter};
 use std::path::Path;
 use std::convert::From;
 use std::process::Command;
@@ -146,6 +146,82 @@ fn git(conn: &mut Connection, project: &str) -> Result<(), Error> {
     Ok(())
 }
 
+fn print_border(max_lengths: &[usize], top: bool, joined: bool) {
+    let left = match (top, joined) {
+        (true, true) => "┌",
+        (true, false) => "",
+        (false, true) => "├",
+        (false, false) => "└"
+    };
+    let right = match (top, joined) {
+        (true, true) => "┐",
+        (true, false) => "",
+        (false, true) => "┤",
+        (false, false) => "┘"
+
+    };
+    let middle = match (top, joined) {
+        (true, true) => "┬",
+        (true, false) => "",
+        (false, true) => "┼",
+        (false, false) => "┴"
+    };
+    print!("{}", left);
+    for (i, len) in max_lengths.iter().enumerate() {
+        let bars: String = iter::repeat("─").take(len+2).collect();
+        print!("{}", bars);
+        if i == max_lengths.len() - 1 { print!("{}", right); } else { print!("{}", middle); }
+    }
+    println!("");
+}
+
+fn print_table<T>(headers: &[&str], rows: &[T]) where T: AsRef<[String]> {
+    let max_lengths: Vec<usize> = headers.iter().enumerate().map(|(i,v)| {
+        let lengths = rows.iter().map(|row| row.as_ref()[i].len());
+        cmp::max(lengths.max().unwrap(), v.len())
+    }).collect();
+
+
+    print_border(&max_lengths, true, true);
+    print!("│");
+    for (i, len) in max_lengths.iter().enumerate() {
+        let header = headers[i];
+        let to_pad = len - header.len();
+        let spaces: String = iter::repeat(" ").take(to_pad).collect();
+        print!(" {}{} │", header, spaces);
+    }
+    println!("");
+    print_border(&max_lengths, false, true);
+
+    for row in rows {
+        print!("│");
+        for (i, len) in max_lengths.iter().enumerate() {
+            let ref cell = row.as_ref()[i];
+            let to_pad = len - cell.len();
+            let spaces: String = iter::repeat(" ").take(to_pad).collect();
+            print!(" {}{} │", cell, spaces);
+        }
+        println!("");
+    }
+    print_border(&max_lengths, false, false);
+}
+
+fn projects(conn: &mut Connection) -> Result<(), Error> {
+    let mut projects_stmnt = conn.prepare("SELECT id, name, customer FROM projects;")?;
+    let rows = projects_stmnt.query_map(&[], |row| (row.get(0), row.get(1), row.get(2)))?;
+    let mut tags_stmnt = conn.prepare("SELECT tag_name FROM tags_projects_join WHERE project_id=?")?;
+    let headers = ["Id", "Name", "Customer", "Tags"];
+    let mut table = vec![];
+    for row in rows {
+        let project: (i32, String, Option<String>) = row?;
+        let id: i32 = project.0;
+        let tags: Vec<String> = tags_stmnt.query_map(&[&id], |row| row.get(0))?.map(|tag| tag.unwrap()).collect();
+        table.push([format!("{}", id), project.1, project.2.unwrap_or("".into()), tags.join(",")]);
+    }
+    print_table(&headers, &table);
+    Ok(())
+}
+
 fn main() {
     env_logger::init().unwrap();
 
@@ -184,6 +260,8 @@ fn main() {
                     .arg(Arg::with_name("PROJECT")
                          .help("the project to assign the commits to")
                          .required(true)))
+        .subcommand(SubCommand::with_name("projects")
+                    .about("List the projects"))
         .get_matches();
 
     let res = if let Some(matches) = matches.subcommand_matches("new") {
@@ -192,6 +270,8 @@ fn main() {
         track(&mut conn, matches.value_of("PROJECT").unwrap(), matches.value_of("description"))
     } else if let Some(matches) = matches.subcommand_matches("git") {
         git(&mut conn, matches.value_of("PROJECT").unwrap())
+    } else if let Some(matches) = matches.subcommand_matches("projects") {
+        projects(&mut conn)
     } else {
         unreachable!();
     };
