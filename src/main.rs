@@ -1,3 +1,5 @@
+#![feature(question_mark)]
+
 #[macro_use]
 extern crate log;
 extern crate env_logger;
@@ -34,43 +36,43 @@ fn open_connection() -> Result<Connection, Error> {
         fs::create_dir(&path).unwrap();
     }
     let path = path.join("db.sqlite3");
-    let conn = try!(Connection::open(path));
+    let conn = Connection::open(path)?;
 
-    try!(conn.execute_batch("CREATE TABLE IF NOT EXISTS projects (
-                               id       INTEGER PRIMARY KEY,
-                               name     TEXT NOT NULL UNIQUE,
-                               customer TEXT
-                             );
-                             CREATE TABLE IF NOT EXISTS tags_projects_join (
-                               tag_name   TEXT NOT NULL,
-                               project_id INTEGER NOT NULL,
-                               UNIQUE(tag_name, project_id)
-                             );
-                             CREATE TABLE IF NOT EXISTS timeperiods (
-                               id           INTEGER PRIMARY KEY,
-                               project_id   INTEGER NOT NULL,
-                               description  TEXT,
-                               start        DATETIME NOT NULL,
-                               end          DATETIME NOT NULL
-                             );
-                             CREATE TABLE IF NOT EXISTS commits (
-                               sha           TEXT NOT NULL UNIQUE,
-                               summary       TEXT NOT NULL,
-                               project_id    INTEGER NOT NULL,
-                               timeperiod_id INTEGER NOT NULL);"));
+    conn.execute_batch("CREATE TABLE IF NOT EXISTS projects (
+                            id       INTEGER PRIMARY KEY,
+                            name     TEXT NOT NULL UNIQUE,
+                            customer TEXT
+                        );
+                        CREATE TABLE IF NOT EXISTS tags_projects_join (
+                            tag_name   TEXT NOT NULL,
+                            project_id INTEGER NOT NULL,
+                            UNIQUE(tag_name, project_id)
+                        );
+                        CREATE TABLE IF NOT EXISTS timeperiods (
+                            id           INTEGER PRIMARY KEY,
+                            project_id   INTEGER NOT NULL,
+                            description  TEXT,
+                            start        DATETIME NOT NULL,
+                            end          DATETIME NOT NULL
+                        );
+                        CREATE TABLE IF NOT EXISTS commits (
+                            sha           TEXT NOT NULL UNIQUE,
+                            summary       TEXT NOT NULL,
+                            project_id    INTEGER NOT NULL,
+                            timeperiod_id INTEGER NOT NULL);")?;
     return Ok(conn);
 }
 
 
 fn create_project(conn: &mut Connection, name: &str, customer: Option<&str>, tags: &str) -> Result<(), Error> {
-    let tx = try!(conn.transaction());
-    let proj_id = try!(tx.execute("INSERT INTO projects(name, customer) VALUES (?,?)", &[&name, &customer]));
+    let tx = conn.transaction()?;
+    let proj_id = tx.execute("INSERT INTO projects(name, customer) VALUES (?,?)", &[&name, &customer])?;
     if tags != "" {
         for tag in tags.split(",") {
-            try!(tx.execute("INSERT INTO tags_projects_join VALUES (?, ?)", &[&tag, &proj_id]));
+            tx.execute("INSERT INTO tags_projects_join VALUES (?, ?)", &[&tag, &proj_id])?;
         }
     }
-    try!(tx.commit());
+    tx.commit()?;
     Ok(())
 }
 
@@ -83,7 +85,7 @@ fn find_project(conn: &mut Connection, name: &str) -> Result<i32, Error> {
 }
 
 fn track(conn: &mut Connection, name: &str, description: Option<&str>) -> Result<(), Error> {
-    let proj_id = try!(find_project(conn, name));
+    let proj_id = find_project(conn, name)?;
     let start = Local::now();
     println!("When you are finished with the task press ENTER");
 
@@ -91,21 +93,21 @@ fn track(conn: &mut Connection, name: &str, description: Option<&str>) -> Result
     io::stdin().read_line(&mut s).unwrap();
 
     let end = Local::now();
-    try!(conn.execute("INSERT INTO timeperiods(project_id, start, end, description) VALUES (?,?,?,?)", &[&proj_id, &start, &end, &description]));
+    conn.execute("INSERT INTO timeperiods(project_id, start, end, description) VALUES (?,?,?,?)", &[&proj_id, &start, &end, &description])?;
     Ok(())
 }
 
 fn git(conn: &mut Connection, project: &str) -> Result<(), Error> {
-    let proj_id = try!(find_project(conn, project));
-    let tx = try!(conn.transaction());
+    let proj_id = find_project(conn, project)?;
+    let tx = conn.transaction()?;
 
-    try!(tx.execute("DELETE FROM commits WHERE project_id=?", &[&proj_id]));
+    tx.execute("DELETE FROM commits WHERE project_id=?", &[&proj_id])?;
     // tx.prepare borrows tx so to call commit stmnt must be dropped
     {
-        let mut stmnt = try!(tx.prepare("SELECT id, start, end FROM timeperiods WHERE project_id=?"));
-        let mut rows = try!(stmnt.query(&[&proj_id]));
+        let mut stmnt = tx.prepare("SELECT id, start, end FROM timeperiods WHERE project_id=?")?;
+        let mut rows = stmnt.query(&[&proj_id])?;
         while let Some(row) = rows.next() {
-            let row = try!(row);
+            let row = row?;
             let period_id: i32 = row.get(0);
             let start: DateTime<Local> = row.get(1);
             let end: DateTime<Local> = row.get(2);
@@ -116,7 +118,7 @@ fn git(conn: &mut Connection, project: &str) -> Result<(), Error> {
                .arg(format!("--until={}", end.to_rfc3339()))
                .arg("-q");
             debug!("executing {:?}", cmd);
-            let output = try!(cmd.output().map_err(|e|{ error!("{:?}", e); Error::Git}));
+            let output = cmd.output().map_err(|e|{ error!("{:?}", e); Error::Git})?;
 
             if !output.status.success() {
                 error!("Git error: {}", String::from_utf8_lossy(&output.stderr));
@@ -125,7 +127,7 @@ fn git(conn: &mut Connection, project: &str) -> Result<(), Error> {
             let s: String = String::from_utf8_lossy(&output.stdout).into_owned();
 
             let mut lines = s.lines();
-            let mut insert_stmnt = try!(tx.prepare("INSERT INTO commits (sha, summary, project_id, timeperiod_id) values(?,?,?,?)"));
+            let mut insert_stmnt = tx.prepare("INSERT INTO commits (sha, summary, project_id, timeperiod_id) values(?,?,?,?)")?;
 
             while let Some(line) = lines.next() {
                 if line.starts_with("commit") {
@@ -134,13 +136,13 @@ fn git(conn: &mut Connection, project: &str) -> Result<(), Error> {
                     lines.next();
                     lines.next();
                     let summary = lines.next().unwrap().trim();
-                    try!(insert_stmnt.execute(&[&sha, &summary, &proj_id, &period_id]));
+                    insert_stmnt.execute(&[&sha, &summary, &proj_id, &period_id])?;
                 }
             }
         };
     }
 
-    try!(tx.commit());
+    tx.commit()?;
     Ok(())
 }
 
