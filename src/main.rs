@@ -206,7 +206,7 @@ fn print_table<T>(headers: &[String], rows: &[T]) where T: AsRef<[String]> {
 }
 
 fn projects(conn: &mut Connection) -> Result<(), Error> {
-    let mut projects_stmnt = conn.prepare("SELECT id, name, customer, group_concat(tag_name, \",\") FROM projects JOIN tags_projects_join on project_id=projects.id;")?;
+    let mut projects_stmnt = conn.prepare("SELECT id, name, customer, group_concat(tag_name) FROM projects LEFT JOIN tags_projects_join on project_id=projects.id GROUP BY id;")?;
     let rows = projects_stmnt.query_map(&[], |row| (row.get(0), row.get(1), row.get(2), row.get(3)))?;
     let headers = ["Id".into(), "Name".into(), "Customer".into(), "Tags".into()];
     let mut table = vec![];
@@ -220,7 +220,7 @@ fn projects(conn: &mut Connection) -> Result<(), Error> {
 
 fn project(conn: &mut Connection, name: &str) -> Result<(), Error> {
     let (id, customer, tags): (i32, Option<String>, Option<String>) =
-        conn.query_row("SELECT id, customer, group_concat(tag_name, \",\") FROM projects JOIN tags_projects_join ON project_id=projects.id WHERE name=?",
+        conn.query_row("SELECT id, customer, group_concat(tag_name) FROM projects JOIN tags_projects_join ON project_id=projects.id WHERE name=?",
                        &[&name], |row| (row.get(0), row.get(1), row.get(2)))?;
     let title_style = Style::new().underline().bold();
     print!("{}", title_style.paint(name));
