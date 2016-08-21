@@ -246,8 +246,9 @@ fn print_table<T>(headers: &[String], rows: &[T])
 
 fn projects(conn: &mut Connection) -> Result<(), Error> {
     let mut projects_stmnt =
-        conn.prepare("SELECT id, name, customer, group_concat(tag_name) FROM projects LEFT JOIN \
-                      tags_projects_join on project_id=projects.id GROUP BY id;")?;
+        conn.prepare("SELECT id, name, customer, group_concat(tag_name) FROM projects
+                      LEFT JOIN tags_projects_join on project_id=projects.id
+                      GROUP BY id;")?;
     let rows =
         projects_stmnt.query_map(&[], |row| (row.get(0), row.get(1), row.get(2), row.get(3)))?;
     let headers = ["Id".into(), "Name".into(), "Customer".into(), "Tags".into()];
@@ -264,15 +265,16 @@ fn projects(conn: &mut Connection) -> Result<(), Error> {
 }
 
 fn print_activity(conn: &mut Connection, id: i32) -> Result<(), Error> {
-    let subtitle_style = Style::new().underline();
-    println!("{}", subtitle_style.paint("Activity"));
-
     let mut periods_stmnt =
         conn.prepare("SELECT id, start, end, description
                       FROM timeperiods WHERE project_id=?
                       ORDER BY start DESC")?;
     let rows = periods_stmnt.query_map(&[&id],
                    |row| (row.get(0), row.get(1), row.get(2), row.get(3)))?;
+
+    let subtitle_style = Style::new().underline();
+    println!("{}", subtitle_style.paint("Activity"));
+
     for row in rows {
         let (timeperiod_id, start, end, description): (i32,
                                                        DateTime<Local>,
@@ -329,11 +331,12 @@ fn print_project_summary(conn: &mut Connection,
         println!("Tags: {}", tags);
     }
 
-    let total_time: f64 =
+    let total_time: Option<f64> =
         conn.query_row("SELECT SUM(CAST((julianday(end)-julianday(start))*24 as REAL))
                         FROM timeperiods WHERE project_id=?",
                        &[&id],
                        |row| row.get(0))?;
+    let total_time = total_time.unwrap_or(0.0);
     let total_time_str = if total_time > 1.0 {
         format!("{}hrs {}mins",
                 total_time.floor(),
@@ -349,7 +352,7 @@ fn print_project_summary(conn: &mut Connection,
 fn project(conn: &mut Connection, name: &str) -> Result<(), Error> {
     let (id, customer, tags): (i32, Option<String>, Option<String>) =
         conn.query_row("SELECT id, customer, group_concat(tag_name) FROM projects
-                        JOIN tags_projects_join ON project_id=projects.id
+                        LEFT JOIN tags_projects_join ON project_id=projects.id
                         WHERE name=?",
                        &[&name],
                        |row| (row.get(0), row.get(1), row.get(2)))?;
