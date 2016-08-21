@@ -21,13 +21,13 @@ use ansi_term::Style;
 #[derive(Debug)]
 enum Error {
     ProjectNotFound(String),
-    SqliteError(rusqlite::Error),
+    Sqlite(rusqlite::Error),
     Git,
 }
 
 impl From<rusqlite::Error> for Error {
     fn from(e: rusqlite::Error) -> Error {
-        Error::SqliteError(e)
+        Error::Sqlite(e)
     }
 }
 
@@ -413,7 +413,7 @@ fn main() {
         Ok(()) => {}
         Err(Error::ProjectNotFound(p)) => println!("Project {} not found", p),
         Err(Error::Git) => println!("No git repository found"),
-        Err(Error::SqliteError(e)) => {
+        Err(Error::Sqlite(e)) => {
             println!("There was a problem with the database");
             error!("{:?}", e);
         }
