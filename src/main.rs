@@ -62,7 +62,7 @@ fn open_connection() -> Result<Connection, Error> {
                             summary       TEXT NOT NULL,
                             project_id    INTEGER NOT NULL,
                             timeperiod_id INTEGER NOT NULL);")?;
-    return Ok(conn);
+    Ok(conn)
 }
 
 
@@ -75,7 +75,7 @@ fn create_project(conn: &mut Connection,
     let proj_id = tx.execute("INSERT INTO projects(name, customer) VALUES (?,?)",
                  &[&name, &customer])?;
     if tags != "" {
-        for tag in tags.split(",") {
+        for tag in tags.split(',') {
             tx.execute("INSERT INTO tags_projects_join VALUES (?, ?)",
                          &[&tag, &proj_id])?;
         }
@@ -156,7 +156,7 @@ fn git(conn: &mut Connection, project: &str) -> Result<(), Error> {
                 //     Add total time to project view
 
                 if line.starts_with("commit") {
-                    let sha = line.split(" ").nth(1).unwrap();
+                    let sha = line.split(' ').nth(1).unwrap();
                     // skip author
                     lines.next();
                     // skip date
@@ -213,7 +213,7 @@ fn print_row<T>(max_lengths: &[usize], row: T)
 {
     print!("│");
     for (i, len) in max_lengths.iter().enumerate() {
-        let ref cell = row.as_ref()[i];
+        let cell = &row.as_ref()[i];
         let to_pad = len - cell.len();
         let spaces: String = iter::repeat(" ").take(to_pad).collect();
         print!(" {}{} │", cell, spaces);
@@ -274,9 +274,9 @@ fn project(conn: &mut Connection, name: &str) -> Result<(), Error> {
     let title_style = Style::new().underline().bold();
     print!("{}", title_style.paint(name));
 
-    if customer.is_some() {
+    if let Some(customer) = customer {
         print!("{}",
-               title_style.paint(format!("for {}", customer.unwrap())));
+               title_style.paint(format!("for {}", customer)));
     }
     println!("");
 
@@ -402,7 +402,7 @@ fn main() {
               matches.value_of("description"))
     } else if let Some(matches) = matches.subcommand_matches("git") {
         git(&mut conn, matches.value_of("PROJECT").unwrap())
-    } else if let Some(matches) = matches.subcommand_matches("projects") {
+    } else if let Some(_) = matches.subcommand_matches("projects") {
         projects(&mut conn)
     } else if let Some(matches) = matches.subcommand_matches("project") {
         project(&mut conn, matches.value_of("NAME").unwrap())
