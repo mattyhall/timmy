@@ -282,7 +282,9 @@ fn print_activity(conn: &mut Connection, id: i32) -> Result<(), Error> {
                                                        Option<String>) = row?;
         let diff = end - start;
         let time_string = if diff.num_hours() > 0 {
-            format!("{}hrs {}mins", diff.num_hours(), diff.num_minutes())
+            let hrs = diff.num_hours();
+            let secs = diff.num_minutes() - 60*hrs;
+            format!("{}hrs {}mins", hrs, secs)
         } else if diff.num_minutes() > 0 {
             format!("{}mins", diff.num_minutes())
         } else {
