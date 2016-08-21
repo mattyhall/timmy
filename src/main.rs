@@ -231,6 +231,14 @@ fn project(conn: &mut Connection, name: &str) -> Result<(), Error> {
     if let Some(tags) = tags {
         println!("Tags: {}", tags);
     }
+    let total_time: f64 = conn.query_row("SELECT SUM(CAST((julianday(end)-julianday(start))*24 as REAL)) FROM timeperiods WHERE project_id=?",
+        &[&id], |row| row.get(0))?;
+    let total_time_str = if total_time > 1.0 {
+        format!("{}hrs {}mins", total_time.floor(), (60.0 * (total_time - total_time.floor())).floor())
+    } else {
+        format!("{}mins", (total_time*60.0).floor())
+    };
+    println!("Time spent: {}", total_time_str);
     println!("");
     let subtitle_style = Style::new().underline();
     println!("{}", subtitle_style.paint("Recent activity"));
