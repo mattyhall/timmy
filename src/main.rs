@@ -7,6 +7,7 @@ extern crate env_logger;
 extern crate clap;
 extern crate rusqlite;
 extern crate chrono;
+extern crate ansi_term;
 
 use std::{fs, env, io, cmp, iter};
 use std::path::Path;
@@ -15,6 +16,7 @@ use std::process::Command;
 use clap::{Arg, App, SubCommand};
 use rusqlite::Connection;
 use chrono::*;
+use ansi_term::Style;
 
 #[derive(Debug)]
 enum Error {
@@ -219,6 +221,46 @@ fn projects(conn: &mut Connection) -> Result<(), Error> {
     Ok(())
 }
 
+fn project(conn: &mut Connection, name: &str) -> Result<(), Error> {
+    let (id, customer): (i32, Option<String>) = conn.query_row("SELECT id, customer FROM projects WHERE name=?", &[&name], |row| (row.get(0), row.get(1)))?;
+    let title_style = Style::new().underline().bold();
+    print!("{}", title_style.paint(name));
+    if customer.is_some() {
+        print!("{}", title_style.paint(format!("for {}", customer.unwrap())));
+    }
+    println!("\n");
+    let subtitle_style = Style::new().underline();
+    println!("{}", subtitle_style.paint("Recent activity"));
+
+    let mut periods_stmnt = conn.prepare("SELECT id, start, end, description FROM timeperiods WHERE project_id=? ORDER BY start DESC")?;
+    let rows = periods_stmnt.query_map(&[&id], |row| (row.get(0), row.get(1), row.get(2), row.get(3)))?;
+    for row in rows {
+        let (timeperiod_id, start, end, description): (i32, DateTime<Local>, DateTime<Local>, Option<String>) = row?;
+        let diff = end - start;
+        let time_string = if diff.num_hours() > 0 {
+            format!("{}hrs {}mins", diff.num_hours(), diff.num_minutes())
+        } else if diff.num_minutes() > 0 {
+            format!("{}mins", diff.num_minutes())
+        } else {
+            format!("{}secs", diff.num_seconds())
+        };
+        let description_string = if let Some(desc) = description {
+            format!(": {}", desc)
+        } else {
+            "".into()
+        };
+        let time_fmt = "%H:%M";
+        println!("{} {}-{} {}{}", start.format("%a %d %B %Y"), start.format(time_fmt), end.format(time_fmt), time_string, description_string);
+        let mut commits_stmnt = conn.prepare("SELECT summary FROM commits WHERE timeperiod_id=?")?;
+        let commits = commits_stmnt.query_map(&[&timeperiod_id], |row| (row.get(0)))?;
+        for commit in commits {
+            let msg: String = commit?;
+            println!("    * {}", msg);
+        }
+    }
+    Ok(())
+}
+
 fn main() {
     env_logger::init().unwrap();
 
@@ -259,6 +301,11 @@ fn main() {
                          .required(true)))
         .subcommand(SubCommand::with_name("projects")
                     .about("List the projects"))
+        .subcommand(SubCommand::with_name("project")
+                    .about("Show a project")
+                    .arg(Arg::with_name("NAME")
+                         .help("the project to show")
+                         .required(true)))
         .get_matches();
 
     let res = if let Some(matches) = matches.subcommand_matches("new") {
@@ -269,6 +316,8 @@ fn main() {
         git(&mut conn, matches.value_of("PROJECT").unwrap())
     } else if let Some(matches) = matches.subcommand_matches("projects") {
         projects(&mut conn)
+    } else if let Some(matches) = matches.subcommand_matches("project") {
+        project(&mut conn, matches.value_of("NAME").unwrap())
     } else {
         unreachable!();
     };
