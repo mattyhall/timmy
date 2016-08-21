@@ -263,9 +263,9 @@ fn projects(conn: &mut Connection) -> Result<(), Error> {
     Ok(())
 }
 
-fn print_recent_activity(conn: &mut Connection, id: i32) -> Result<(), Error> {
+fn print_activity(conn: &mut Connection, id: i32) -> Result<(), Error> {
     let subtitle_style = Style::new().underline();
-    println!("{}", subtitle_style.paint("Recent activity"));
+    println!("{}", subtitle_style.paint("Activity"));
 
     let mut periods_stmnt =
         conn.prepare("SELECT id, start, end, description
@@ -354,7 +354,7 @@ fn project(conn: &mut Connection, name: &str) -> Result<(), Error> {
                        &[&name],
                        |row| (row.get(0), row.get(1), row.get(2)))?;
     print_project_summary(conn, id, name, customer, tags)?;
-    print_recent_activity(conn, id)
+    print_activity(conn, id)
 }
 
 fn main() {
