@@ -263,43 +263,7 @@ fn projects(conn: &mut Connection) -> Result<(), Error> {
     Ok(())
 }
 
-fn project(conn: &mut Connection, name: &str) -> Result<(), Error> {
-    let (id, customer, tags): (i32, Option<String>, Option<String>) =
-        conn.query_row("SELECT id, customer, group_concat(tag_name) FROM projects
-                        JOIN tags_projects_join ON project_id=projects.id
-                        WHERE name=?",
-                       &[&name],
-                       |row| (row.get(0), row.get(1), row.get(2)))?;
-
-    let title_style = Style::new().underline().bold();
-    print!("{}", title_style.paint(name));
-
-    if let Some(customer) = customer {
-        print!("{}",
-               title_style.paint(format!("for {}", customer)));
-    }
-    println!("");
-
-    if let Some(tags) = tags {
-        println!("Tags: {}", tags);
-    }
-
-    let total_time: f64 =
-        conn.query_row("SELECT SUM(CAST((julianday(end)-julianday(start))*24 as REAL))
-                        FROM timeperiods WHERE project_id=?",
-                       &[&id],
-                       |row| row.get(0))?;
-    let total_time_str = if total_time > 1.0 {
-        format!("{}hrs {}mins",
-                total_time.floor(),
-                (60.0 * (total_time - total_time.floor())).floor())
-    } else {
-        format!("{}mins", (total_time * 60.0).floor())
-    };
-    println!("Time spent: {}", total_time_str);
-    println!("");
-
-
+fn print_recent_activity(conn: &mut Connection, id: i32) -> Result<(), Error> {
     let subtitle_style = Style::new().underline();
     println!("{}", subtitle_style.paint("Recent activity"));
 
@@ -343,6 +307,54 @@ fn project(conn: &mut Connection, name: &str) -> Result<(), Error> {
         }
     }
     Ok(())
+}
+
+fn print_project_summary(conn: &mut Connection,
+                         id: i32,
+                         name: &str,
+                         customer: Option<String>,
+                         tags: Option<String>)
+                         -> Result<(), Error>
+{
+    let title_style = Style::new().underline().bold();
+    print!("{}", title_style.paint(name));
+
+    if let Some(customer) = customer {
+        print!("{}",
+               title_style.paint(format!("for {}", customer)));
+    }
+    println!("");
+
+    if let Some(tags) = tags {
+        println!("Tags: {}", tags);
+    }
+
+    let total_time: f64 =
+        conn.query_row("SELECT SUM(CAST((julianday(end)-julianday(start))*24 as REAL))
+                        FROM timeperiods WHERE project_id=?",
+                       &[&id],
+                       |row| row.get(0))?;
+    let total_time_str = if total_time > 1.0 {
+        format!("{}hrs {}mins",
+                total_time.floor(),
+                (60.0 * (total_time - total_time.floor())).floor())
+    } else {
+        format!("{}mins", (total_time * 60.0).floor())
+    };
+    println!("Time spent: {}", total_time_str);
+    println!("");
+    Ok(())
+}
+
+fn project(conn: &mut Connection, name: &str) -> Result<(), Error> {
+    let (id, customer, tags): (i32, Option<String>, Option<String>) =
+        conn.query_row("SELECT id, customer, group_concat(tag_name) FROM projects
+                        JOIN tags_projects_join ON project_id=projects.id
+                        WHERE name=?",
+                       &[&name],
+                       |row| (row.get(0), row.get(1), row.get(2)))?;
+    print_project_summary(conn, id, name, customer, tags)?;
+    print_recent_activity(conn, id)
 }
 
 fn main() {
