@@ -219,13 +219,19 @@ fn projects(conn: &mut Connection) -> Result<(), Error> {
 }
 
 fn project(conn: &mut Connection, name: &str) -> Result<(), Error> {
-    let (id, customer): (i32, Option<String>) = conn.query_row("SELECT id, customer FROM projects WHERE name=?", &[&name], |row| (row.get(0), row.get(1)))?;
+    let (id, customer, tags): (i32, Option<String>, Option<String>) =
+        conn.query_row("SELECT id, customer, group_concat(tag_name, \",\") FROM projects JOIN tags_projects_join ON project_id=projects.id WHERE name=?",
+                       &[&name], |row| (row.get(0), row.get(1), row.get(2)))?;
     let title_style = Style::new().underline().bold();
     print!("{}", title_style.paint(name));
     if customer.is_some() {
         print!("{}", title_style.paint(format!("for {}", customer.unwrap())));
     }
-    println!("\n");
+    println!("");
+    if let Some(tags) = tags {
+        println!("Tags: {}", tags);
+    }
+    println!("");
     let subtitle_style = Style::new().underline();
     println!("{}", subtitle_style.paint("Recent activity"));
 
