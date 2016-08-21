@@ -66,12 +66,18 @@ fn open_connection() -> Result<Connection, Error> {
 }
 
 
-fn create_project(conn: &mut Connection, name: &str, customer: Option<&str>, tags: &str) -> Result<(), Error> {
+fn create_project(conn: &mut Connection,
+                  name: &str,
+                  customer: Option<&str>,
+                  tags: &str)
+                  -> Result<(), Error> {
     let tx = conn.transaction()?;
-    let proj_id = tx.execute("INSERT INTO projects(name, customer) VALUES (?,?)", &[&name, &customer])?;
+    let proj_id = tx.execute("INSERT INTO projects(name, customer) VALUES (?,?)",
+                 &[&name, &customer])?;
     if tags != "" {
         for tag in tags.split(",") {
-            tx.execute("INSERT INTO tags_projects_join VALUES (?, ?)", &[&tag, &proj_id])?;
+            tx.execute("INSERT INTO tags_projects_join VALUES (?, ?)",
+                         &[&tag, &proj_id])?;
         }
     }
     tx.commit()?;
@@ -79,10 +85,12 @@ fn create_project(conn: &mut Connection, name: &str, customer: Option<&str>, tag
 }
 
 fn find_project(conn: &mut Connection, name: &str) -> Result<i32, Error> {
-    match conn.query_row("SELECT id FROM projects WHERE name=?", &[&name], |row| row.get(0)) {
+    match conn.query_row("SELECT id FROM projects WHERE name=?",
+                         &[&name],
+                         |row| row.get(0)) {
         Ok(id) => Ok(id),
         Err(rusqlite::Error::QueryReturnedNoRows) => Err(Error::ProjectNotFound(name.into())),
-        Err(e) => Err(Error::from(e))
+        Err(e) => Err(Error::from(e)),
     }
 }
 
@@ -95,7 +103,8 @@ fn track(conn: &mut Connection, name: &str, description: Option<&str>) -> Result
     io::stdin().read_line(&mut s).unwrap();
 
     let end = Local::now();
-    conn.execute("INSERT INTO timeperiods(project_id, start, end, description) VALUES (?,?,?,?)", &[&proj_id, &start, &end, &description])?;
+    conn.execute("INSERT INTO timeperiods(project_id, start, end, description) VALUES (?,?,?,?)",
+                 &[&proj_id, &start, &end, &description])?;
     Ok(())
 }
 
@@ -120,7 +129,11 @@ fn git(conn: &mut Connection, project: &str) -> Result<(), Error> {
                .arg(format!("--until={}", end.to_rfc3339()))
                .arg("-q");
             debug!("executing {:?}", cmd);
-            let output = cmd.output().map_err(|e|{ error!("{:?}", e); Error::Git})?;
+            let output = cmd.output()
+                .map_err(|e| {
+                    error!("{:?}", e);
+                    Error::Git
+                })?;
 
             if !output.status.success() {
                 error!("Git error: {}", String::from_utf8_lossy(&output.stderr));
@@ -129,19 +142,33 @@ fn git(conn: &mut Connection, project: &str) -> Result<(), Error> {
             let s: String = String::from_utf8_lossy(&output.stdout).into_owned();
 
             let mut lines = s.lines();
-            let mut insert_stmnt = tx.prepare("INSERT INTO commits (sha, summary, project_id, timeperiod_id) values(?,?,?,?)")?;
+            let mut insert_stmnt =
+                tx.prepare("INSERT INTO commits (sha, summary, project_id, timeperiod_id) \
+                              values(?,?,?,?)")?;
 
             while let Some(line) = lines.next() {
+                // parses the following:
+
+                // commit f04a366b0da4377b2f1e87dc9ec68bdf68c24cee
+                // Author: Matthew Hall <matthew@quickbeam.me.uk>
+                // Date:   Sun Aug 21 15:00:43 2016 +0100
+                //
+                //     Add total time to project view
+
                 if line.starts_with("commit") {
                     let sha = line.split(" ").nth(1).unwrap();
+                    // skip author
                     lines.next();
+                    // skip date
                     lines.next();
+                    // skip newline
                     lines.next();
+                    // parse summary
                     let summary = lines.next().unwrap().trim();
                     insert_stmnt.execute(&[&sha, &summary, &proj_id, &period_id])?;
                 }
             }
-        };
+        }
     }
 
     tx.commit()?;
@@ -153,31 +180,37 @@ fn print_border(max_lengths: &[usize], top: bool, joined: bool) {
         (true, true) => "┌",
         (true, false) => "",
         (false, true) => "├",
-        (false, false) => "└"
+        (false, false) => "└",
     };
     let right = match (top, joined) {
         (true, true) => "┐",
         (true, false) => "",
         (false, true) => "┤",
-        (false, false) => "┘"
+        (false, false) => "┘",
 
     };
     let middle = match (top, joined) {
         (true, true) => "┬",
         (true, false) => "",
         (false, true) => "┼",
-        (false, false) => "┴"
+        (false, false) => "┴",
     };
     print!("{}", left);
     for (i, len) in max_lengths.iter().enumerate() {
-        let bars: String = iter::repeat("─").take(len+2).collect();
+        let bars: String = iter::repeat("─").take(len + 2).collect();
         print!("{}", bars);
-        if i == max_lengths.len() - 1 { print!("{}", right); } else { print!("{}", middle); }
+        if i == max_lengths.len() - 1 {
+            print!("{}", right);
+        } else {
+            print!("{}", middle);
+        }
     }
     println!("");
 }
 
-fn print_row<T>(max_lengths: &[usize], row: T) where T: AsRef<[String]> {
+fn print_row<T>(max_lengths: &[usize], row: T)
+    where T: AsRef<[String]>
+{
     print!("│");
     for (i, len) in max_lengths.iter().enumerate() {
         let ref cell = row.as_ref()[i];
@@ -188,11 +221,17 @@ fn print_row<T>(max_lengths: &[usize], row: T) where T: AsRef<[String]> {
     println!("");
 }
 
-fn print_table<T>(headers: &[String], rows: &[T]) where T: AsRef<[String]> {
-    let max_lengths: Vec<usize> = headers.iter().enumerate().map(|(i,v)| {
-        let lengths = rows.iter().map(|row| row.as_ref()[i].len());
-        cmp::max(lengths.max().unwrap(), v.len())
-    }).collect();
+fn print_table<T>(headers: &[String], rows: &[T])
+    where T: AsRef<[String]>
+{
+    let max_lengths: Vec<usize> =
+        headers.iter()
+               .enumerate()
+               .map(|(i, v)| {
+                   let lengths = rows.iter().map(|row| row.as_ref()[i].len());
+                   cmp::max(lengths.max().unwrap(), v.len())
+               })
+               .collect();
 
 
     print_border(&max_lengths, true, true);
@@ -206,13 +245,19 @@ fn print_table<T>(headers: &[String], rows: &[T]) where T: AsRef<[String]> {
 }
 
 fn projects(conn: &mut Connection) -> Result<(), Error> {
-    let mut projects_stmnt = conn.prepare("SELECT id, name, customer, group_concat(tag_name) FROM projects LEFT JOIN tags_projects_join on project_id=projects.id GROUP BY id;")?;
-    let rows = projects_stmnt.query_map(&[], |row| (row.get(0), row.get(1), row.get(2), row.get(3)))?;
+    let mut projects_stmnt =
+        conn.prepare("SELECT id, name, customer, group_concat(tag_name) FROM projects LEFT JOIN \
+                      tags_projects_join on project_id=projects.id GROUP BY id;")?;
+    let rows =
+        projects_stmnt.query_map(&[], |row| (row.get(0), row.get(1), row.get(2), row.get(3)))?;
     let headers = ["Id".into(), "Name".into(), "Customer".into(), "Tags".into()];
     let mut table = vec![];
     for row in rows {
         let (id, name, customer, tags): (i32, String, Option<String>, Option<String>) = row?;
-        table.push([format!("{}", id), name, customer.unwrap_or("".into()), tags.unwrap_or("".into())]);
+        table.push([format!("{}", id),
+                    name,
+                    customer.unwrap_or("".into()),
+                    tags.unwrap_or("".into())]);
     }
     print_table(&headers, &table);
     Ok(())
@@ -220,33 +265,55 @@ fn projects(conn: &mut Connection) -> Result<(), Error> {
 
 fn project(conn: &mut Connection, name: &str) -> Result<(), Error> {
     let (id, customer, tags): (i32, Option<String>, Option<String>) =
-        conn.query_row("SELECT id, customer, group_concat(tag_name) FROM projects JOIN tags_projects_join ON project_id=projects.id WHERE name=?",
-                       &[&name], |row| (row.get(0), row.get(1), row.get(2)))?;
+        conn.query_row("SELECT id, customer, group_concat(tag_name) FROM projects
+                        JOIN tags_projects_join ON project_id=projects.id
+                        WHERE name=?",
+                       &[&name],
+                       |row| (row.get(0), row.get(1), row.get(2)))?;
+
     let title_style = Style::new().underline().bold();
     print!("{}", title_style.paint(name));
+
     if customer.is_some() {
-        print!("{}", title_style.paint(format!("for {}", customer.unwrap())));
+        print!("{}",
+               title_style.paint(format!("for {}", customer.unwrap())));
     }
     println!("");
+
     if let Some(tags) = tags {
         println!("Tags: {}", tags);
     }
-    let total_time: f64 = conn.query_row("SELECT SUM(CAST((julianday(end)-julianday(start))*24 as REAL)) FROM timeperiods WHERE project_id=?",
-        &[&id], |row| row.get(0))?;
+
+    let total_time: f64 =
+        conn.query_row("SELECT SUM(CAST((julianday(end)-julianday(start))*24 as REAL))
+                        FROM timeperiods WHERE project_id=?",
+                       &[&id],
+                       |row| row.get(0))?;
     let total_time_str = if total_time > 1.0 {
-        format!("{}hrs {}mins", total_time.floor(), (60.0 * (total_time - total_time.floor())).floor())
+        format!("{}hrs {}mins",
+                total_time.floor(),
+                (60.0 * (total_time - total_time.floor())).floor())
     } else {
-        format!("{}mins", (total_time*60.0).floor())
+        format!("{}mins", (total_time * 60.0).floor())
     };
     println!("Time spent: {}", total_time_str);
     println!("");
+
+
     let subtitle_style = Style::new().underline();
     println!("{}", subtitle_style.paint("Recent activity"));
 
-    let mut periods_stmnt = conn.prepare("SELECT id, start, end, description FROM timeperiods WHERE project_id=? ORDER BY start DESC")?;
-    let rows = periods_stmnt.query_map(&[&id], |row| (row.get(0), row.get(1), row.get(2), row.get(3)))?;
+    let mut periods_stmnt =
+        conn.prepare("SELECT id, start, end, description
+                      FROM timeperiods WHERE project_id=?
+                      ORDER BY start DESC")?;
+    let rows = periods_stmnt.query_map(&[&id],
+                   |row| (row.get(0), row.get(1), row.get(2), row.get(3)))?;
     for row in rows {
-        let (timeperiod_id, start, end, description): (i32, DateTime<Local>, DateTime<Local>, Option<String>) = row?;
+        let (timeperiod_id, start, end, description): (i32,
+                                                       DateTime<Local>,
+                                                       DateTime<Local>,
+                                                       Option<String>) = row?;
         let diff = end - start;
         let time_string = if diff.num_hours() > 0 {
             format!("{}hrs {}mins", diff.num_hours(), diff.num_minutes())
@@ -261,7 +328,13 @@ fn project(conn: &mut Connection, name: &str) -> Result<(), Error> {
             "".into()
         };
         let time_fmt = "%H:%M";
-        println!("{} {}-{} {}{}", start.format("%a %d %B %Y"), start.format(time_fmt), end.format(time_fmt), time_string, description_string);
+        println!("{} {}-{} {}{}",
+                 start.format("%a %d %B %Y"),
+                 start.format(time_fmt),
+                 end.format(time_fmt),
+                 time_string,
+                 description_string);
+
         let mut commits_stmnt = conn.prepare("SELECT summary FROM commits WHERE timeperiod_id=?")?;
         let commits = commits_stmnt.query_map(&[&timeperiod_id], |row| (row.get(0)))?;
         for commit in commits {
@@ -276,53 +349,57 @@ fn main() {
     env_logger::init().unwrap();
 
     let mut conn = open_connection().unwrap();
-    let matches =
-        App::new("Timmy")
-            .version("0.1")
-            .author("Matthew Hall")
-            .about("Time tracker")
-            .subcommand(SubCommand::with_name("new")
-                        .about("Creates a new project")
-                        .arg(Arg::with_name("NAME")
-                             .help("the project name")
-                             .required(true))
-                        .arg(Arg::with_name("customer")
-                             .short("c")
-                             .long("customer")
-                             .takes_value(true))
-                        .arg(Arg::with_name("tags")
-                             .short("t")
-                             .long("tags")
-                             .help("comma separated list of tags")
-                             .takes_value(true)))
+    let matches = App::new("Timmy")
+        .version("0.1")
+        .author("Matthew Hall")
+        .about("Time tracker")
+        .subcommand(SubCommand::with_name("new")
+            .about("Creates a new project")
+            .arg(Arg::with_name("NAME")
+                .help("the project name")
+                .required(true))
+            .arg(Arg::with_name("customer")
+                .short("c")
+                .long("customer")
+                .takes_value(true))
+            .arg(Arg::with_name("tags")
+                .short("t")
+                .long("tags")
+                .help("comma separated list of tags")
+                .takes_value(true)))
         .subcommand(SubCommand::with_name("track")
-                    .about("Start tracking a time period")
-                    .arg(Arg::with_name("PROJECT")
-                         .help("the project to start tracking time for")
-                         .required(true))
-                    .arg(Arg::with_name("description")
-                         .short("d")
-                         .long("description")
-                         .help("a description of what you will do in the timeperiod")
-                         .takes_value(true)))
+            .about("Start tracking a time period")
+            .arg(Arg::with_name("PROJECT")
+                .help("the project to start tracking time for")
+                .required(true))
+            .arg(Arg::with_name("description")
+                .short("d")
+                .long("description")
+                .help("a description of what you will do in the timeperiod")
+                .takes_value(true)))
         .subcommand(SubCommand::with_name("git")
-                    .about("go through each time period and store the commits that happened during that time")
-                    .arg(Arg::with_name("PROJECT")
-                         .help("the project to assign the commits to")
-                         .required(true)))
-        .subcommand(SubCommand::with_name("projects")
-                    .about("List the projects"))
+            .about("go through each time period and store the commits that happened during that \
+                    time")
+            .arg(Arg::with_name("PROJECT")
+                .help("the project to assign the commits to")
+                .required(true)))
+        .subcommand(SubCommand::with_name("projects").about("List the projects"))
         .subcommand(SubCommand::with_name("project")
-                    .about("Show a project")
-                    .arg(Arg::with_name("NAME")
-                         .help("the project to show")
-                         .required(true)))
+            .about("Show a project")
+            .arg(Arg::with_name("NAME")
+                .help("the project to show")
+                .required(true)))
         .get_matches();
 
     let res = if let Some(matches) = matches.subcommand_matches("new") {
-        create_project(&mut conn, matches.value_of("NAME").unwrap(), matches.value_of("customer"), matches.value_of("tags").unwrap_or("".into()))
+        create_project(&mut conn,
+                       matches.value_of("NAME").unwrap(),
+                       matches.value_of("customer"),
+                       matches.value_of("tags").unwrap_or("".into()))
     } else if let Some(matches) = matches.subcommand_matches("track") {
-        track(&mut conn, matches.value_of("PROJECT").unwrap(), matches.value_of("description"))
+        track(&mut conn,
+              matches.value_of("PROJECT").unwrap(),
+              matches.value_of("description"))
     } else if let Some(matches) = matches.subcommand_matches("git") {
         git(&mut conn, matches.value_of("PROJECT").unwrap())
     } else if let Some(matches) = matches.subcommand_matches("projects") {
@@ -333,12 +410,12 @@ fn main() {
         unreachable!();
     };
     match res {
-        Ok(()) => {},
+        Ok(()) => {}
         Err(Error::ProjectNotFound(p)) => println!("Project {} not found", p),
         Err(Error::Git) => println!("No git repository found"),
         Err(Error::SqliteError(e)) => {
             println!("There was a problem with the database");
             error!("{:?}", e);
-        },
+        }
     }
 }
