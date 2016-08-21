@@ -206,16 +206,13 @@ fn print_table<T>(headers: &[String], rows: &[T]) where T: AsRef<[String]> {
 }
 
 fn projects(conn: &mut Connection) -> Result<(), Error> {
-    let mut projects_stmnt = conn.prepare("SELECT id, name, customer FROM projects;")?;
-    let rows = projects_stmnt.query_map(&[], |row| (row.get(0), row.get(1), row.get(2)))?;
-    let mut tags_stmnt = conn.prepare("SELECT tag_name FROM tags_projects_join WHERE project_id=?")?;
+    let mut projects_stmnt = conn.prepare("SELECT id, name, customer, group_concat(tag_name, \",\") FROM projects JOIN tags_projects_join on project_id=projects.id;")?;
+    let rows = projects_stmnt.query_map(&[], |row| (row.get(0), row.get(1), row.get(2), row.get(3)))?;
     let headers = ["Id".into(), "Name".into(), "Customer".into(), "Tags".into()];
     let mut table = vec![];
     for row in rows {
-        let project: (i32, String, Option<String>) = row?;
-        let id: i32 = project.0;
-        let tags: Vec<String> = tags_stmnt.query_map(&[&id], |row| row.get(0))?.map(|tag| tag.unwrap()).collect();
-        table.push([format!("{}", id), project.1, project.2.unwrap_or("".into()), tags.join(",")]);
+        let (id, name, customer, tags): (i32, String, Option<String>, Option<String>) = row?;
+        table.push([format!("{}", id), name, customer.unwrap_or("".into()), tags.unwrap_or("".into())]);
     }
     print_table(&headers, &table);
     Ok(())
