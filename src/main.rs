@@ -346,6 +346,27 @@ fn weeks(conn: &mut Connection, name: &str) -> Result<(), Error> {
     Ok(())
 }
 
+fn short_weeks(conn: &mut Connection, name: &str) -> Result<(), Error> {
+    let project_id = find_project(conn, name)?;
+    let mut weeks_stmnt =
+        conn.prepare("SELECT start,
+                             SUM(CAST((julianday(end)-julianday(start))*24 AS REAL))
+                      FROM timeperiods
+                      WHERE project_id=?
+                      GROUP BY strftime('%W', start)
+                      ORDER BY strftime('%Y%W', start) DESC")?;
+    let rows = weeks_stmnt.query_map(&[&project_id], |row| (row.get(0), row.get(1)))?;
+    for row in rows {
+        let (start, time): (DateTime<Local>, f64) = row?;
+        let (y,w,_) = start.isoweekdate();
+        let start_of_week = NaiveDate::from_isoywd(y, w, Weekday::Mon);
+        let end_of_week = NaiveDate::from_isoywd(y, w, Weekday::Sun);
+        let time_str = format_time(time);
+        println!("{}-{}\t{}", start_of_week.format("%d/%m/%y"), end_of_week.format("%d/%m/%y"), time_str);
+    }
+    Ok(())
+}
+
 fn main() {
     env_logger::init().unwrap();
 
@@ -394,7 +415,10 @@ fn main() {
             .about("show time spent per week")
             .arg(Arg::with_name("PROJECT")
                 .help("the project to show")
-                .required(true)))
+                .required(true))
+            .arg(Arg::with_name("short")
+                 .long("short")
+                 .help("show the short view")))
         .get_matches();
 
     let res = if let Some(matches) = matches.subcommand_matches("new") {
@@ -413,7 +437,11 @@ fn main() {
     } else if let Some(matches) = matches.subcommand_matches("project") {
         project(&mut conn, matches.value_of("NAME").unwrap())
     } else if let Some(matches) = matches.subcommand_matches("weeks") {
-        weeks(&mut conn, matches.value_of("PROJECT").unwrap())
+        if matches.is_present("short") {
+            short_weeks(&mut conn, matches.value_of("PROJECT").unwrap())
+        } else {
+            weeks(&mut conn, matches.value_of("PROJECT").unwrap())
+        }
     } else {
         unreachable!();
     };
