@@ -289,7 +289,13 @@ fn project(conn: &mut Connection, name: &str) -> Result<(), Error> {
                         LEFT JOIN tags_projects_join ON project_id=projects.id
                         WHERE name=?",
                        &[&name],
-                       |row| (row.get(0), row.get(1), row.get(2)))?;
+                       |row| {
+                           let id: Option<i32> = row.get(0);
+                           if let None = id {
+                               return Err(Error::ProjectNotFound(name.into()));
+                           }
+                           Ok((row.get(0), row.get(1), row.get(2)))
+                       })??;
     print_project_summary(conn, id, name, customer, tags)?;
     print_activity(conn, id)
 }
