@@ -300,7 +300,7 @@ fn project(conn: &mut Connection, name: &str) -> Result<(), Error> {
     print_activity(conn, id)
 }
 
-fn week(conn: &mut Connection, name: &str) -> Result<(), Error> {
+fn weeks(conn: &mut Connection, name: &str) -> Result<(), Error> {
     let project_id = find_project(conn, name)?;
     let mut day_stmnt =
         conn.prepare("SELECT start,
@@ -390,7 +390,7 @@ fn main() {
             .arg(Arg::with_name("NAME")
                 .help("the project to show")
                 .required(true)))
-        .subcommand(SubCommand::with_name("week")
+        .subcommand(SubCommand::with_name("weeks")
             .about("show time spent per week")
             .arg(Arg::with_name("PROJECT")
                 .help("the project to show")
@@ -412,8 +412,8 @@ fn main() {
         projects(&mut conn)
     } else if let Some(matches) = matches.subcommand_matches("project") {
         project(&mut conn, matches.value_of("NAME").unwrap())
-    } else if let Some(matches) = matches.subcommand_matches("week") {
-        week(&mut conn, matches.value_of("PROJECT").unwrap())
+    } else if let Some(matches) = matches.subcommand_matches("weeks") {
+        weeks(&mut conn, matches.value_of("PROJECT").unwrap())
     } else {
         unreachable!();
     };
