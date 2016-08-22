@@ -145,12 +145,12 @@ fn git(conn: &mut Connection, project: &str) -> Result<(), Error> {
             debug!("executing {:?}", cmd);
             let output = cmd.output()
                 .map_err(|e| {
-                    error!("{:?}", e);
+                    debug!("{:?}", e);
                     Error::Git
                 })?;
 
             if !output.status.success() {
-                error!("Git error: {}", String::from_utf8_lossy(&output.stderr));
+                debug!("Git error: {}", String::from_utf8_lossy(&output.stderr));
                 return Err(Error::Git);
             }
             let s: String = String::from_utf8_lossy(&output.stdout).into_owned();
@@ -423,7 +423,7 @@ fn main() {
         Err(Error::Git) => println!("No git repository found"),
         Err(Error::Sqlite(e)) => {
             println!("There was a problem with the database");
-            error!("{:?}", e);
+            debug!("{:?}", e);
         }
     }
 }
