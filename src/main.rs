@@ -65,6 +65,17 @@ fn open_connection() -> Result<Connection, Error> {
     Ok(conn)
 }
 
+fn format_time(time: f64) -> String {
+    if time > 1.0 {
+        format!("{}hrs {}mins",
+                time.floor(),
+                (60.0 * (time - time.floor())).floor())
+    } else if time > 0.0 {
+        format!("{}mins", (time * 60.0).floor())
+    } else {
+        format!("None")
+    }
+}
 
 fn create_project(conn: &mut Connection,
                   name: &str,
@@ -266,30 +277,23 @@ fn projects(conn: &mut Connection) -> Result<(), Error> {
 
 fn print_activity(conn: &mut Connection, id: i32) -> Result<(), Error> {
     let mut periods_stmnt =
-        conn.prepare("SELECT id, start, end, description
+        conn.prepare("SELECT id, start, end, description,
+                             CAST((julianday(end)-julianday(start))*24 AS REAL)
                       FROM timeperiods WHERE project_id=?
                       ORDER BY start DESC")?;
     let rows = periods_stmnt.query_map(&[&id],
-                   |row| (row.get(0), row.get(1), row.get(2), row.get(3)))?;
+                   |row| (row.get(0), row.get(1), row.get(2), row.get(3), row.get(4)))?;
 
     let subtitle_style = Style::new().underline();
     println!("{}", subtitle_style.paint("Activity"));
 
     for row in rows {
-        let (timeperiod_id, start, end, description): (i32,
-                                                       DateTime<Local>,
-                                                       DateTime<Local>,
-                                                       Option<String>) = row?;
-        let diff = end - start;
-        let time_string = if diff.num_hours() > 0 {
-            let hrs = diff.num_hours();
-            let secs = diff.num_minutes() - 60*hrs;
-            format!("{}hrs {}mins", hrs, secs)
-        } else if diff.num_minutes() > 0 {
-            format!("{}mins", diff.num_minutes())
-        } else {
-            format!("{}secs", diff.num_seconds())
-        };
+        let (timeperiod_id, start, end, description, time): (i32,
+                                                             DateTime<Local>,
+                                                             DateTime<Local>,
+                                                             Option<String>,
+                                                             f64) = row?;
+        let time_string = format_time(time);
         let description_string = if let Some(desc) = description {
             format!(": {}", desc)
         } else {
@@ -339,13 +343,7 @@ fn print_project_summary(conn: &mut Connection,
                        &[&id],
                        |row| row.get(0))?;
     let total_time = total_time.unwrap_or(0.0);
-    let total_time_str = if total_time > 1.0 {
-        format!("{}hrs {}mins",
-                total_time.floor(),
-                (60.0 * (total_time - total_time.floor())).floor())
-    } else {
-        format!("{}mins", (total_time * 60.0).floor())
-    };
+    let total_time_str = format_time(total_time);
     println!("Time spent: {}", total_time_str);
     println!("");
     Ok(())
@@ -380,13 +378,7 @@ fn week(conn: &mut Connection, name: &str) -> Result<(), Error> {
     for row in rows {
         let (start, time): (DateTime<Local>, f64) = row?;
         let (y,w,_) = start.isoweekdate();
-        let time_str = if time > 1.0 {
-            format!("{}hrs {}mins",
-                    time.floor(),
-                    (60.0 * (time - time.floor())).floor())
-        } else {
-            format!("{}mins", (time * 60.0).floor())
-        };
+        let time_str = format_time(time);
         let week_str = if w != week || y != year {
             week = w;
             year = y;
