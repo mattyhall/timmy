@@ -362,6 +362,45 @@ fn project(conn: &mut Connection, name: &str) -> Result<(), Error> {
     print_activity(conn, id)
 }
 
+fn week(conn: &mut Connection, name: &str) -> Result<(), Error> {
+    let project_id = find_project(conn, name)?;
+    let mut day_stmnt =
+        conn.prepare("SELECT start,
+                             SUM(CAST((julianday(end)-julianday(start))*24 AS REAL))
+                      FROM timeperiods
+                      WHERE project_id=?
+                      GROUP BY strftime('%j', start)
+                      ORDER BY strftime('%Y%W', start) DESC, start")?;
+    let rows = day_stmnt.query_map(&[&project_id], |row| (row.get(0), row.get(1)))?;
+    let mut week = 0;
+    let mut year = 0;
+    let mut start_of_week = NaiveDate::from_isoywd(1, 1, Weekday::Mon);
+    let headers = ["Week".into(), "Day".into(), "Time".into()];
+    let mut table = vec![];
+    for row in rows {
+        let (start, time): (DateTime<Local>, f64) = row?;
+        let (y,w,_) = start.isoweekdate();
+        let time_str = if time > 1.0 {
+            format!("{}hrs {}mins",
+                    time.floor(),
+                    (60.0 * (time - time.floor())).floor())
+        } else {
+            format!("{}mins", (time * 60.0).floor())
+        };
+        let week_str = if w != week || y != year {
+            week = w;
+            year = y;
+            start_of_week = NaiveDate::from_isoywd(y, w, Weekday::Mon);
+            format!("{}", start_of_week.format("%d/%m/%y"))
+        } else {
+            "".into()
+        };
+        table.push([week_str, format!("{}", start.format("%a")), time_str]);
+    }
+    print_table(&headers, &table);
+    Ok(())
+}
+
 fn main() {
     env_logger::init().unwrap();
 
@@ -406,6 +445,11 @@ fn main() {
             .arg(Arg::with_name("NAME")
                 .help("the project to show")
                 .required(true)))
+        .subcommand(SubCommand::with_name("week")
+            .about("show time spent per week")
+            .arg(Arg::with_name("PROJECT")
+                .help("the project to show")
+                .required(true)))
         .get_matches();
 
     let res = if let Some(matches) = matches.subcommand_matches("new") {
@@ -423,6 +467,8 @@ fn main() {
         projects(&mut conn)
     } else if let Some(matches) = matches.subcommand_matches("project") {
         project(&mut conn, matches.value_of("NAME").unwrap())
+    } else if let Some(matches) = matches.subcommand_matches("week") {
+        week(&mut conn, matches.value_of("PROJECT").unwrap())
     } else {
         unreachable!();
     };
