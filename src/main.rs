@@ -1,5 +1,7 @@
 #![feature(question_mark)]
 
+extern crate timmy;
+
 #[macro_use]
 extern crate log;
 extern crate env_logger;
@@ -9,7 +11,7 @@ extern crate rusqlite;
 extern crate chrono;
 extern crate ansi_term;
 
-use std::{fs, env, io, cmp, iter};
+use std::{fs, env, io};
 use std::path::Path;
 use std::convert::From;
 use std::process::Command;
@@ -17,6 +19,7 @@ use clap::{Arg, App, SubCommand};
 use rusqlite::Connection;
 use chrono::*;
 use ansi_term::Style;
+use timmy::tables::*;
 
 #[derive(Debug)]
 enum Error {
@@ -186,75 +189,6 @@ fn git(conn: &mut Connection, project: &str) -> Result<(), Error> {
     Ok(())
 }
 
-fn print_border(max_lengths: &[usize], top: bool, joined: bool) {
-    let left = match (top, joined) {
-        (true, true) => "┌",
-        (true, false) => "",
-        (false, true) => "├",
-        (false, false) => "└",
-    };
-    let right = match (top, joined) {
-        (true, true) => "┐",
-        (true, false) => "",
-        (false, true) => "┤",
-        (false, false) => "┘",
-
-    };
-    let middle = match (top, joined) {
-        (true, true) => "┬",
-        (true, false) => "",
-        (false, true) => "┼",
-        (false, false) => "┴",
-    };
-    print!("{}", left);
-    for (i, len) in max_lengths.iter().enumerate() {
-        let bars: String = iter::repeat("─").take(len + 2).collect();
-        print!("{}", bars);
-        if i == max_lengths.len() - 1 {
-            print!("{}", right);
-        } else {
-            print!("{}", middle);
-        }
-    }
-    println!("");
-}
-
-fn print_row<T>(max_lengths: &[usize], row: T)
-    where T: AsRef<[String]>
-{
-    print!("│");
-    for (i, len) in max_lengths.iter().enumerate() {
-        let cell = &row.as_ref()[i];
-        let to_pad = len - cell.len();
-        let spaces: String = iter::repeat(" ").take(to_pad).collect();
-        print!(" {}{} │", cell, spaces);
-    }
-    println!("");
-}
-
-fn print_table<T>(headers: &[String], rows: &[T])
-    where T: AsRef<[String]>
-{
-    let max_lengths: Vec<usize> =
-        headers.iter()
-               .enumerate()
-               .map(|(i, v)| {
-                   let lengths = rows.iter().map(|row| row.as_ref()[i].len());
-                   cmp::max(lengths.max().unwrap(), v.len())
-               })
-               .collect();
-
-
-    print_border(&max_lengths, true, true);
-    print_row(&max_lengths, headers);
-    print_border(&max_lengths, false, true);
-
-    for row in rows {
-        print_row(&max_lengths, row);
-    }
-    print_border(&max_lengths, false, false);
-}
-
 fn projects(conn: &mut Connection) -> Result<(), Error> {
     let mut projects_stmnt =
         conn.prepare("SELECT id, name, customer, group_concat(tag_name) FROM projects
@@ -262,16 +196,16 @@ fn projects(conn: &mut Connection) -> Result<(), Error> {
                       GROUP BY id;")?;
     let rows =
         projects_stmnt.query_map(&[], |row| (row.get(0), row.get(1), row.get(2), row.get(3)))?;
-    let headers = ["Id".into(), "Name".into(), "Customer".into(), "Tags".into()];
-    let mut table = vec![];
+    let mut table = Table::with_headers(vec!["Id".into(), "Name".into(), "Customer".into(), "Tags".into()]);
     for row in rows {
         let (id, name, customer, tags): (i32, String, Option<String>, Option<String>) = row?;
-        table.push([format!("{}", id),
-                    name,
-                    customer.unwrap_or("".into()),
-                    tags.unwrap_or("".into())]);
+        table.add_simple(vec![format!("{}", id),
+                              name,
+                              customer.unwrap_or("".into()),
+                              tags.unwrap_or("".into())]);
     }
-    print_table(&headers, &table);
+    table.add_border_bottom();
+    table.print();
     Ok(())
 }
 
@@ -373,8 +307,7 @@ fn week(conn: &mut Connection, name: &str) -> Result<(), Error> {
     let mut week = 0;
     let mut year = 0;
     let mut start_of_week = NaiveDate::from_isoywd(1, 1, Weekday::Mon);
-    let headers = ["Week".into(), "Day".into(), "Time".into()];
-    let mut table = vec![];
+    let mut table = Table::with_headers(vec!["Week".into(), "Day".into(), "Time".into()]);
     let mut total_time = -1.0;
     for row in rows {
         let (start, time): (DateTime<Local>, f64) = row?;
@@ -385,7 +318,7 @@ fn week(conn: &mut Connection, name: &str) -> Result<(), Error> {
             year = y;
             start_of_week = NaiveDate::from_isoywd(y, w, Weekday::Mon);
             if total_time >= 0.0 {
-                table.push(["".into(), "Total".into(), format_time(total_time)]);
+                table.add_simple(vec!["".into(), "Total".into(), format_time(total_time)]);
             }
             total_time = 0.0;
             format!("{}", start_of_week.format("%d/%m/%y"))
@@ -393,10 +326,11 @@ fn week(conn: &mut Connection, name: &str) -> Result<(), Error> {
             "".into()
         };
         total_time += time;
-        table.push([week_str, format!("{}", start.format("%a")), time_str]);
+        table.add_simple(vec![week_str, format!("{}", start.format("%a")), time_str]);
     }
-    table.push(["".into(), "Total".into(), format_time(total_time)]);
-    print_table(&headers, &table);
+    table.add_simple(vec!["".into(), "Total".into(), format_time(total_time)]);
+    table.add_border_bottom();
+    table.print();
     Ok(())
 }
 
