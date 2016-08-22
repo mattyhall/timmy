@@ -9,11 +9,23 @@ enum CellType {
 #[derive(Debug, Clone)]
 struct Cell {
     typ: CellType,
-    border_left: char,
-    border_right: char,
+    border_left: String,
+    border_right: String,
 }
 
 impl Cell {
+    fn new_left_bordered(t: CellType, border: &str) -> Cell {
+        Cell {typ: t, border_left: border.into(), border_right: "".into()}
+    }
+
+    fn new_both_bordered(t: CellType, left: &str, right: &str) -> Cell {
+        Cell {typ: t, border_left: left.into(), border_right: right.into()}
+    }
+
+    fn new_right_bordered(t: CellType, border: &str) -> Cell {
+        Cell {typ: t, border_left: "".into(), border_right: border.into()}
+    }
+
     fn print(&self, width: usize) {
         let middle = match self.typ {
             CellType::Separator => iter::repeat("─").take(width+2).collect(),
@@ -57,35 +69,41 @@ impl Table {
         let cells =
             data.into_iter()
                 .enumerate()
-                .map(|(i, data)| Cell {typ: CellType::Data(data), border_left: '│', border_right: '│'})
+                .map(|(i, data)| {
+                    if i != len-1 {
+                        Cell::new_left_bordered(CellType::Data(data), "│")
+                    } else {
+                        Cell::new_both_bordered(CellType::Data(data), "│", "│")
+                    }
+                })
                 .collect();
         self.rows.push(cells);
     }
 
     fn add_full_separator(&mut self) {
-        self.add_full_separator_custom('├', '┼', '┤');
+        self.add_full_separator_custom("├", "┼", "┤");
     }
 
     fn add_border_top(&mut self) {
-        self.add_full_separator_custom('┌', '┬', '┐');
+        self.add_full_separator_custom("┌", "┬", "┐");
     }
 
     fn add_border_bottom(&mut self) {
-        self.add_full_separator_custom('└', '┴', '┘');
+        self.add_full_separator_custom("└", "┴", "┘");
     }
 
-    fn add_full_separator_custom(&mut self, left: char, middle: char, right: char) {
+    fn add_full_separator_custom(&mut self, left: &str, middle: &str, right: &str) {
         let mut cells = vec![];
-        let middle_cell = Cell {typ: CellType::Separator, border_left: middle, border_right: middle};
+        let middle_cell = Cell::new_left_bordered(CellType::Separator, middle);
         if self.cols == 1 {
-            cells.push(Cell {typ: CellType::Separator, border_left: left, border_right: right})
+            cells.push(Cell::new_both_bordered(CellType::Separator, left, right));
         } else {
-            cells.push(Cell {typ: CellType::Separator, border_left: left, border_right: middle})
+            cells.push(Cell::new_left_bordered(CellType::Separator, left));
         }
         let mut middle_cells: Vec<Cell> = (0..self.cols-2).map(|_| middle_cell.clone()).collect();
         cells.append(&mut middle_cells);
         if self.cols != 1 {
-            cells.push(Cell {typ: CellType::Separator, border_left: middle, border_right: right})
+            cells.push(Cell::new_both_bordered(CellType::Separator, middle, right));
         }
         self.rows.push(cells);
     }
