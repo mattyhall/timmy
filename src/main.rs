@@ -375,6 +375,7 @@ fn week(conn: &mut Connection, name: &str) -> Result<(), Error> {
     let mut start_of_week = NaiveDate::from_isoywd(1, 1, Weekday::Mon);
     let headers = ["Week".into(), "Day".into(), "Time".into()];
     let mut table = vec![];
+    let mut total_time = -1.0;
     for row in rows {
         let (start, time): (DateTime<Local>, f64) = row?;
         let (y,w,_) = start.isoweekdate();
@@ -383,12 +384,18 @@ fn week(conn: &mut Connection, name: &str) -> Result<(), Error> {
             week = w;
             year = y;
             start_of_week = NaiveDate::from_isoywd(y, w, Weekday::Mon);
+            if total_time >= 0.0 {
+                table.push(["".into(), "Total".into(), format_time(total_time)]);
+            }
+            total_time = 0.0;
             format!("{}", start_of_week.format("%d/%m/%y"))
         } else {
             "".into()
         };
+        total_time += time;
         table.push([week_str, format!("{}", start.format("%a")), time_str]);
     }
+    table.push(["".into(), "Total".into(), format_time(total_time)]);
     print_table(&headers, &table);
     Ok(())
 }
