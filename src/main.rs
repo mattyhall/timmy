@@ -309,6 +309,9 @@ fn week(conn: &mut Connection, name: &str) -> Result<(), Error> {
     let mut start_of_week = NaiveDate::from_isoywd(1, 1, Weekday::Mon);
     let mut table = Table::with_headers(vec!["Week".into(), "Day".into(), "Time".into()]);
     let mut total_time = -1.0;
+    let total_separator = vec![Cell::new_left_bordered(CellType::Data("".into()), "│"),
+                               Cell::new_left_bordered(CellType::Separator, "├"),
+                               Cell::new_both_bordered(CellType::Separator, "┼", "┤")];
     for row in rows {
         let (start, time): (DateTime<Local>, f64) = row?;
         let (y,w,_) = start.isoweekdate();
@@ -318,7 +321,9 @@ fn week(conn: &mut Connection, name: &str) -> Result<(), Error> {
             year = y;
             start_of_week = NaiveDate::from_isoywd(y, w, Weekday::Mon);
             if total_time >= 0.0 {
+                table.add_row(total_separator.clone());
                 table.add_simple(vec!["".into(), "Total".into(), format_time(total_time)]);
+                table.add_full_separator();
             }
             total_time = 0.0;
             format!("{}", start_of_week.format("%d/%m/%y"))
@@ -328,6 +333,7 @@ fn week(conn: &mut Connection, name: &str) -> Result<(), Error> {
         total_time += time;
         table.add_simple(vec![week_str, format!("{}", start.format("%a")), time_str]);
     }
+    table.add_row(total_separator.clone());
     table.add_simple(vec!["".into(), "Total".into(), format_time(total_time)]);
     table.add_border_bottom();
     table.print();
