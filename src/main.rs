@@ -98,7 +98,7 @@ fn create_project(conn: &mut Connection,
     Ok(())
 }
 
-fn find_project(conn: &mut Connection, name: &str) -> Result<i32, Error> {
+fn find_project(conn: &mut Connection, name: &str) -> Result<i64, Error> {
     match conn.query_row("SELECT id FROM projects WHERE name=?",
                          &[&name],
                          |row| row.get(0)) {
@@ -124,13 +124,13 @@ fn track(conn: &mut Connection, name: &str, description: Option<&str>) -> Result
     {
         let mut stmnt = tx.prepare("INSERT INTO commits (sha, summary, project_id, timeperiod_id) \
                                     values(?,?,?,?)")?;
-        get_commits(&mut stmnt, proj_id, period_id as i32, &start, &end)?;
+        get_commits(&mut stmnt, proj_id, period_id, &start, &end)?;
     }
     tx.commit()?;
     Ok(())
 }
 
-fn get_commits(insert_stmnt: &mut Statement, proj_id: i32, period_id: i32, start: &DateTime<Local>, end: &DateTime<Local>) -> Result<(), Error> {
+fn get_commits(insert_stmnt: &mut Statement, proj_id: i64, period_id: i64, start: &DateTime<Local>, end: &DateTime<Local>) -> Result<(), Error> {
     let mut cmd = Command::new("git");
     cmd.arg("whatchanged")
         .arg(format!("--since={}", start.to_rfc3339()))
@@ -190,7 +190,7 @@ fn git(conn: &mut Connection, project: &str) -> Result<(), Error> {
                                            values(?,?,?,?)")?;
         while let Some(row) = rows.next() {
             let row = row?;
-            let period_id: i32 = row.get(0);
+            let period_id: i64 = row.get(0);
             let start: DateTime<Local> = row.get(1);
             let end: DateTime<Local> = row.get(2);
             get_commits(&mut insert_stmnt, proj_id, period_id, &start, &end)?;
@@ -210,7 +210,7 @@ fn projects(conn: &mut Connection) -> Result<(), Error> {
         projects_stmnt.query_map(&[], |row| (row.get(0), row.get(1), row.get(2), row.get(3)))?;
     let mut table = Table::with_headers(vec!["Id".into(), "Name".into(), "Customer".into(), "Tags".into()]);
     for row in rows {
-        let (id, name, customer, tags): (i32, String, Option<String>, Option<String>) = row?;
+        let (id, name, customer, tags): (i64, String, Option<String>, Option<String>) = row?;
         table.add_simple(vec![format!("{}", id),
                               name,
                               customer.unwrap_or("".into()),
@@ -221,7 +221,7 @@ fn projects(conn: &mut Connection) -> Result<(), Error> {
     Ok(())
 }
 
-fn print_activity(conn: &mut Connection, id: i32) -> Result<(), Error> {
+fn print_activity(conn: &mut Connection, id: i64) -> Result<(), Error> {
     let mut periods_stmnt =
         conn.prepare("SELECT id, start, end, description,
                              CAST((julianday(end)-julianday(start))*24 AS REAL)
@@ -234,7 +234,7 @@ fn print_activity(conn: &mut Connection, id: i32) -> Result<(), Error> {
     println!("{}", subtitle_style.paint("Activity"));
 
     for row in rows {
-        let (timeperiod_id, start, end, description, time): (i32,
+        let (timeperiod_id, start, end, description, time): (i64,
                                                              DateTime<Local>,
                                                              DateTime<Local>,
                                                              Option<String>,
@@ -264,7 +264,7 @@ fn print_activity(conn: &mut Connection, id: i32) -> Result<(), Error> {
 }
 
 fn print_project_summary(conn: &mut Connection,
-                         id: i32,
+                         id: i64,
                          name: &str,
                          customer: Option<String>,
                          tags: Option<String>)
@@ -296,13 +296,13 @@ fn print_project_summary(conn: &mut Connection,
 }
 
 fn project(conn: &mut Connection, name: &str) -> Result<(), Error> {
-    let (id, customer, tags): (i32, Option<String>, Option<String>) =
+    let (id, customer, tags): (i64, Option<String>, Option<String>) =
         conn.query_row("SELECT id, customer, group_concat(tag_name) FROM projects
                         LEFT JOIN tags_projects_join ON project_id=projects.id
                         WHERE name=?",
                        &[&name],
                        |row| {
-                           let id: Option<i32> = row.get(0);
+                           let id: Option<i64> = row.get(0);
                            if let None = id {
                                return Err(Error::ProjectNotFound(name.into()));
                            }
