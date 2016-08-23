@@ -34,4 +34,18 @@ fn test_relative_date() {
 fn test_absolute_time() {
     let in_one_hour = now() + Duration::hours(1);
     let two_hours_ago = now() - Duration::hours(2);
+    assert_eq!(parse_datetime("17:30", now()), Some(in_one_hour));
+    assert_eq!(parse_datetime("14:30", now()), Some(two_hours_ago));
+}
+
+#[test]
+fn test_relative_time() {
+    let in_one_hour = now() + Duration::hours(1);
+    let in_thirty_mins = now() + Duration::minutes(30);
+    let three_hours_ago = now() - Duration::hours(3);
+    assert_eq!(parse_datetime("in 1 hr", now()), Some(in_one_hour));
+    assert_eq!(parse_datetime("in 1 hours", now()), Some(in_one_hour));
+    assert_eq!(parse_datetime("in 30 mins", now()), Some(in_thirty_mins));
+    assert_eq!(parse_datetime("in 30 minutes", now()), Some(in_thirty_mins));
+    assert_eq!(parse_datetime("3 hrs ago", now()), Some(three_hours_ago));
 }
