@@ -16,7 +16,7 @@ use std::path::Path;
 use std::convert::From;
 use std::process::Command;
 use clap::{Arg, App, SubCommand};
-use rusqlite::Connection;
+use rusqlite::{Connection, Statement, Transaction};
 use chrono::*;
 use ansi_term::Style;
 use timmy::tables::*;
@@ -117,8 +117,62 @@ fn track(conn: &mut Connection, name: &str, description: Option<&str>) -> Result
     io::stdin().read_line(&mut s).unwrap();
 
     let end = Local::now();
-    conn.execute("INSERT INTO timeperiods(project_id, start, end, description) VALUES (?,?,?,?)",
-                 &[&proj_id, &start, &end, &description])?;
+    let tx = conn.transaction()?;
+    tx.execute("INSERT INTO timeperiods(project_id, start, end, description) VALUES (?,?,?,?)",
+                &[&proj_id, &start, &end, &description])?;
+    let period_id = tx.last_insert_rowid();
+    {
+        let mut stmnt = tx.prepare("INSERT INTO commits (sha, summary, project_id, timeperiod_id) \
+                                    values(?,?,?,?)")?;
+        get_commits(&mut stmnt, proj_id, period_id as i32, &start, &end)?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+fn get_commits(insert_stmnt: &mut Statement, proj_id: i32, period_id: i32, start: &DateTime<Local>, end: &DateTime<Local>) -> Result<(), Error> {
+    let mut cmd = Command::new("git");
+    cmd.arg("whatchanged")
+        .arg(format!("--since={}", start.to_rfc3339()))
+        .arg(format!("--until={}", end.to_rfc3339()))
+        .arg("-q");
+    debug!("executing {:?}", cmd);
+    let output = cmd.output()
+        .map_err(|e| {
+            debug!("{:?}", e);
+            Error::Git
+        })?;
+
+    if !output.status.success() {
+        debug!("Git error: {}", String::from_utf8_lossy(&output.stderr));
+        return Err(Error::Git);
+    }
+    let s: String = String::from_utf8_lossy(&output.stdout).into_owned();
+
+    let mut lines = s.lines();
+
+    while let Some(line) = lines.next() {
+        // parses the following:
+
+        // commit f04a366b0da4377b2f1e87dc9ec68bdf68c24cee
+        // Author: Matthew Hall <matthew@quickbeam.me.uk>
+        // Date:   Sun Aug 21 15:00:43 2016 +0100
+        //
+        //     Add total time to project view
+
+        if line.starts_with("commit") {
+            let sha = line.split(' ').nth(1).unwrap();
+            // skip author
+            lines.next();
+            // skip date
+            lines.next();
+            // skip newline
+            lines.next();
+            // parse summary
+            let summary = lines.next().unwrap().trim();
+            insert_stmnt.execute(&[&sha, &summary, &proj_id, &period_id])?;
+        }
+    }
     Ok(())
 }
 
@@ -127,61 +181,19 @@ fn git(conn: &mut Connection, project: &str) -> Result<(), Error> {
     let tx = conn.transaction()?;
 
     tx.execute("DELETE FROM commits WHERE project_id=?", &[&proj_id])?;
+
     // tx.prepare borrows tx so to call commit stmnt must be dropped
     {
         let mut stmnt = tx.prepare("SELECT id, start, end FROM timeperiods WHERE project_id=?")?;
         let mut rows = stmnt.query(&[&proj_id])?;
+        let mut insert_stmnt = tx.prepare("INSERT INTO commits (sha, summary, project_id, timeperiod_id) \
+                                           values(?,?,?,?)")?;
         while let Some(row) = rows.next() {
             let row = row?;
             let period_id: i32 = row.get(0);
             let start: DateTime<Local> = row.get(1);
             let end: DateTime<Local> = row.get(2);
-
-            let mut cmd = Command::new("git");
-            cmd.arg("whatchanged")
-               .arg(format!("--since={}", start.to_rfc3339()))
-               .arg(format!("--until={}", end.to_rfc3339()))
-               .arg("-q");
-            debug!("executing {:?}", cmd);
-            let output = cmd.output()
-                .map_err(|e| {
-                    debug!("{:?}", e);
-                    Error::Git
-                })?;
-
-            if !output.status.success() {
-                debug!("Git error: {}", String::from_utf8_lossy(&output.stderr));
-                return Err(Error::Git);
-            }
-            let s: String = String::from_utf8_lossy(&output.stdout).into_owned();
-
-            let mut lines = s.lines();
-            let mut insert_stmnt =
-                tx.prepare("INSERT INTO commits (sha, summary, project_id, timeperiod_id) \
-                              values(?,?,?,?)")?;
-
-            while let Some(line) = lines.next() {
-                // parses the following:
-
-                // commit f04a366b0da4377b2f1e87dc9ec68bdf68c24cee
-                // Author: Matthew Hall <matthew@quickbeam.me.uk>
-                // Date:   Sun Aug 21 15:00:43 2016 +0100
-                //
-                //     Add total time to project view
-
-                if line.starts_with("commit") {
-                    let sha = line.split(' ').nth(1).unwrap();
-                    // skip author
-                    lines.next();
-                    // skip date
-                    lines.next();
-                    // skip newline
-                    lines.next();
-                    // parse summary
-                    let summary = lines.next().unwrap().trim();
-                    insert_stmnt.execute(&[&sha, &summary, &proj_id, &period_id])?;
-                }
-            }
+            get_commits(&mut insert_stmnt, proj_id, period_id, &start, &end)?;
         }
     }
 
@@ -401,7 +413,9 @@ fn main() {
                 .takes_value(true)))
         .subcommand(SubCommand::with_name("git")
             .about("go through each time period and store the commits that happened during that \
-                    time")
+                    time. timmy track automatically does this when you quit it for that \
+                    time period. This command is useful if you've modified your git history \
+                    in some way or you ran timmy track in the wrong directory.")
             .arg(Arg::with_name("PROJECT")
                 .help("the project to assign the commits to")
                 .required(true)))
