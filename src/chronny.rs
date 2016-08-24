@@ -4,7 +4,7 @@ use chrono::*;
 pub fn parse_datetime<Tz: TimeZone>(s: &str, now: DateTime<Tz>) -> Option<DateTime<Tz>> {
     let date_re = Regex::new(r"(?x)
         today|yesterday|now|
-        ((?P<n>\d+) \s days? (?P<ago>(\s ago)?))").unwrap();
+        ((?P<n>\d+) \s (days?|ds?) (?P<ago>(\s ago)?))").unwrap();
     let time_absolute_re = Regex::new(r"(?P<hr>\d{2}):(?P<mins>\d{2})").unwrap();
     let time_relative_re = Regex::new(r"(?x)
         (?P<n>\d+) \s (?P<dur>hrs?|hours?|hs?|minutes?|mins?|ms?) (?P<ago>(\s ago)?)").unwrap();

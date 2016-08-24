@@ -49,3 +49,9 @@ fn test_relative_time() {
     assert_eq!(parse_datetime("in 30 minutes", now()), Some(in_thirty_mins));
     assert_eq!(parse_datetime("3 hrs ago", now()), Some(three_hours_ago));
 }
+
+#[test]
+fn test_kitchen_sink() {
+    let yesterday_two = now() - Duration::days(1) - Duration::hours(2) - Duration::minutes(30);
+    assert_eq!(parse_datetime("yesterday 14:00", now()), Some(yesterday_two));
+}
