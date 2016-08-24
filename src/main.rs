@@ -20,12 +20,14 @@ use rusqlite::{Connection, Statement, Transaction};
 use chrono::*;
 use ansi_term::Style;
 use timmy::tables::*;
+use timmy::chronny;
 
 #[derive(Debug)]
 enum Error {
     ProjectNotFound(String),
     Sqlite(rusqlite::Error),
     Git,
+    InvalidDateTime(String),
 }
 
 impl From<rusqlite::Error> for Error {
@@ -108,15 +110,26 @@ fn find_project(conn: &mut Connection, name: &str) -> Result<i64, Error> {
     }
 }
 
-fn track(conn: &mut Connection, name: &str, description: Option<&str>) -> Result<(), Error> {
+fn track(conn: &mut Connection,
+         name: &str,
+         description: Option<&str>,
+         start: Option<&str>,
+         end: Option<&str>) -> Result<(), Error> {
     let proj_id = find_project(conn, name)?;
-    let start = Local::now();
-    println!("When you are finished with the task press ENTER");
+    let start = if let Some(start) = start {
+        chronny::parse_datetime(start, Local::now()).ok_or(Error::InvalidDateTime(start.into()))?
+    } else {
+        Local::now()
+    };
+    let end = if let Some(end) = end {
+        chronny::parse_datetime(end, Local::now()).ok_or(Error::InvalidDateTime(end.into()))?
+    } else {
+        println!("When you are finished with the task press ENTER");
+        let mut s = String::new();
+        io::stdin().read_line(&mut s).unwrap();
+        Local::now()
+    };
 
-    let mut s = String::new();
-    io::stdin().read_line(&mut s).unwrap();
-
-    let end = Local::now();
     let tx = conn.transaction()?;
     tx.execute("INSERT INTO timeperiods(project_id, start, end, description) VALUES (?,?,?,?)",
                 &[&proj_id, &start, &end, &description])?;
@@ -410,7 +423,18 @@ fn main() {
                 .short("d")
                 .long("description")
                 .help("a description of what you will do in the timeperiod")
-                .takes_value(true)))
+                .takes_value(true))
+            .arg(Arg::with_name("start")
+                 .short("s")
+                 .long("start")
+                 .help("When to track from")
+                 .takes_value(true))
+            .arg(Arg::with_name("end")
+                 .short("e")
+                 .long("end")
+                 .help("When to end")
+                 .takes_value(true)
+                 .requires("start")))
         .subcommand(SubCommand::with_name("git")
             .about("go through each time period and store the commits that happened during that \
                     time. timmy track automatically does this when you quit it for that \
@@ -443,7 +467,9 @@ fn main() {
     } else if let Some(matches) = matches.subcommand_matches("track") {
         track(&mut conn,
               matches.value_of("PROJECT").unwrap(),
-              matches.value_of("description"))
+              matches.value_of("description"),
+              matches.value_of("start"),
+              matches.value_of("end"))
     } else if let Some(matches) = matches.subcommand_matches("git") {
         git(&mut conn, matches.value_of("PROJECT").unwrap())
     } else if let Some(_) = matches.subcommand_matches("projects") {
@@ -466,6 +492,7 @@ fn main() {
         Err(Error::Sqlite(e)) => {
             println!("There was a problem with the database");
             debug!("{:?}", e);
-        }
+        },
+        Err(Error::InvalidDateTime(s)) => println!("Could not parse {}", s),
     }
 }
