@@ -175,6 +175,7 @@ fn get_commits(insert_stmnt: &mut Statement, proj_id: i64, period_id: i64, start
 
         if line.starts_with("commit") {
             let sha = line.split(' ').nth(1).unwrap();
+            debug!("{}", sha);
             // skip author
             lines.next();
             // skip date
@@ -216,16 +217,15 @@ fn git(conn: &mut Connection, project: &str) -> Result<(), Error> {
 
 fn projects(conn: &mut Connection) -> Result<(), Error> {
     let mut projects_stmnt =
-        conn.prepare("SELECT id, name, customer, group_concat(tag_name) FROM projects
+        conn.prepare("SELECT name, customer, group_concat(tag_name) FROM projects
                       LEFT JOIN tags_projects_join on project_id=projects.id
                       GROUP BY id;")?;
     let rows =
-        projects_stmnt.query_map(&[], |row| (row.get(0), row.get(1), row.get(2), row.get(3)))?;
-    let mut table = Table::with_headers(vec!["Id".into(), "Name".into(), "Customer".into(), "Tags".into()]);
+        projects_stmnt.query_map(&[], |row| (row.get(0), row.get(1), row.get(2)))?;
+    let mut table = Table::with_headers(vec!["Name".into(), "Customer".into(), "Tags".into()]);
     for row in rows {
-        let (id, name, customer, tags): (i64, String, Option<String>, Option<String>) = row?;
-        table.add_simple(vec![format!("{}", id),
-                              name,
+        let (name, customer, tags): (String, Option<String>, Option<String>) = row?;
+        table.add_simple(vec![name,
                               customer.unwrap_or("".into()),
                               tags.unwrap_or("".into())]);
     }
