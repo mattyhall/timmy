@@ -263,12 +263,14 @@ fn print_activity(conn: &mut Connection, id: i64, week: bool, since: Option<&str
     let subtitle_style = Style::new().underline();
     println!("{}", subtitle_style.paint("Activity"));
 
+    let mut total = 0.0f64;
     for row in rows {
         let (timeperiod_id, start, end, description, time): (i64,
                                                              DateTime<Local>,
                                                              DateTime<Local>,
                                                              Option<String>,
                                                              f64) = row?;
+        total += time;
         let time_string = format_time(time);
         let description_string = if let Some(desc) = description {
             format!(": {}", desc)
@@ -290,6 +292,7 @@ fn print_activity(conn: &mut Connection, id: i64, week: bool, since: Option<&str
             println!("    * {}", msg);
         }
     }
+    println!("Total: {}", format_time(total));
     Ok(())
 }
 
@@ -320,7 +323,7 @@ fn print_project_summary(conn: &mut Connection,
                        |row| row.get(0))?;
     let total_time = total_time.unwrap_or(0.0);
     let total_time_str = format_time(total_time);
-    println!("Time spent: {}", total_time_str);
+    println!("Total time spent: {}", total_time_str);
     println!("");
     Ok(())
 }
