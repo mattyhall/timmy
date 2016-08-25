@@ -22,6 +22,7 @@ fn test_absolute_date() {
     assert_eq!(parse_datetime("01/08/16", now()), Some(first));
     assert_eq!(parse_datetime("01/08/2016", now()), Some(first));
     assert_eq!(parse_datetime("1/8/2016", now()), Some(first));
+    assert_eq!(parse_datetime("01/08", now()), Some(first));
 }
 
 #[test]
