@@ -20,6 +20,8 @@ fn test_absolute_date() {
     let first = DateTime::parse_from_rfc3339("2016-08-01T16:30:00+01:00").unwrap();
     assert_eq!(parse_datetime("yesterday", now()), Some(yesterday));
     assert_eq!(parse_datetime("01/08/16", now()), Some(first));
+    assert_eq!(parse_datetime("01/08/2016", now()), Some(first));
+    assert_eq!(parse_datetime("1/8/2016", now()), Some(first));
 }
 
 #[test]
