@@ -184,6 +184,7 @@ fn get_commits(insert_stmnt: &mut Statement, proj_id: i64, period_id: i64, start
             lines.next();
             // parse summary
             let summary = lines.next().unwrap().trim();
+            println!("Found commit {}: {}", sha, summary);
             insert_stmnt.execute(&[&sha, &summary, &proj_id, &period_id])?;
         }
     }
