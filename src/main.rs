@@ -234,13 +234,27 @@ fn projects(conn: &mut Connection) -> Result<(), Error> {
     Ok(())
 }
 
-fn print_activity(conn: &mut Connection, id: i64) -> Result<(), Error> {
+fn print_activity(conn: &mut Connection, id: i64, since: Option<&str>, until: Option<&str>) -> Result<(), Error> {
+    let since = if let Some(since) = since {
+        debug!("{}", since);
+        chronny::parse_datetime(since, Local::now()).ok_or(Error::InvalidDateTime(since.into()))?
+    } else {
+        Local::now().with_year(1).unwrap()
+    };
+    let until = if let Some(until) = until {
+        debug!("{}", until);
+        chronny::parse_datetime(until, Local::now()).ok_or(Error::InvalidDateTime(until.into()))?
+    } else {
+        Local::now()
+    };
+    debug!("printing activity between {:?} and {:?}", since, until);
     let mut periods_stmnt =
         conn.prepare("SELECT id, start, end, description,
                              CAST((julianday(end)-julianday(start))*24 AS REAL)
-                      FROM timeperiods WHERE project_id=?
+                      FROM timeperiods
+                      WHERE project_id=? AND start > ? AND start < ?
                       ORDER BY start DESC")?;
-    let rows = periods_stmnt.query_map(&[&id],
+    let rows = periods_stmnt.query_map(&[&id, &since, &until],
                    |row| (row.get(0), row.get(1), row.get(2), row.get(3), row.get(4)))?;
 
     let subtitle_style = Style::new().underline();
@@ -308,7 +322,7 @@ fn print_project_summary(conn: &mut Connection,
     Ok(())
 }
 
-fn project(conn: &mut Connection, name: &str) -> Result<(), Error> {
+fn project(conn: &mut Connection, name: &str, since: Option<&str>, until: Option<&str>) -> Result<(), Error> {
     let (id, customer, tags): (i64, Option<String>, Option<String>) =
         conn.query_row("SELECT id, customer, group_concat(tag_name) FROM projects
                         LEFT JOIN tags_projects_join ON project_id=projects.id
@@ -322,7 +336,7 @@ fn project(conn: &mut Connection, name: &str) -> Result<(), Error> {
                            Ok((row.get(0), row.get(1), row.get(2)))
                        })??;
     print_project_summary(conn, id, name, customer, tags)?;
-    print_activity(conn, id)
+    print_activity(conn, id, since, until)
 }
 
 fn weeks(conn: &mut Connection, name: &str) -> Result<(), Error> {
@@ -448,7 +462,17 @@ fn main() {
             .about("Show a project")
             .arg(Arg::with_name("NAME")
                 .help("the project to show")
-                .required(true)))
+                .required(true))
+            .arg(Arg::with_name("since")
+                 .short("s")
+                 .long("since")
+                 .help("the date and time from which to show activity")
+                 .takes_value(true))
+            .arg(Arg::with_name("until")
+                 .short("u")
+                 .long("until")
+                 .help("the date and time until which to show activity")
+                 .takes_value(true)))
         .subcommand(SubCommand::with_name("weeks")
             .about("show time spent per week")
             .arg(Arg::with_name("PROJECT")
@@ -475,7 +499,7 @@ fn main() {
     } else if let Some(_) = matches.subcommand_matches("projects") {
         projects(&mut conn)
     } else if let Some(matches) = matches.subcommand_matches("project") {
-        project(&mut conn, matches.value_of("NAME").unwrap())
+        project(&mut conn, matches.value_of("NAME").unwrap(), matches.value_of("since"), matches.value_of("until"))
     } else if let Some(matches) = matches.subcommand_matches("weeks") {
         if matches.is_present("short") {
             short_weeks(&mut conn, matches.value_of("PROJECT").unwrap())
