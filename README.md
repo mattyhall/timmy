@@ -1,5 +1,11 @@
 # Timmy
-Timmy is a time tracker.
+[Timmy](https://crates.io/crates/timmy) is a time tracker. At the moment it is not particularly stable or even well written! Things like parsing dates in english (eg. "yesterday 12:00") may be buggy. If you do want to install it run:
+
+```
+matt@box:~/$ cargo install timmy
+```
+
+and make sure `~/.cargo/bin` or equivalent is in your PATH.
 
 ## Example usage
 

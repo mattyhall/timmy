@@ -2,6 +2,10 @@
 name = "timmy"
 version = "0.1.0"
 authors = ["Matthew Hall <matthew@quickbeam.me.uk>"]
+description = "A time tracker mainly for programming tasks"
+repository = "https://github.com/mattyhall/timmy"
+license = "BSD-3-Clause"
+keywords = ["application"]
 
 [dependencies]
 rusqlite = { version = "0.7.3", features = ["chrono"] }
