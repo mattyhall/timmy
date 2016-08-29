@@ -121,6 +121,7 @@ fn track(conn: &mut Connection,
     } else {
         Local::now()
     };
+    println!("Starting at {}", start.format("%d/%m/%y %H:%M"));
     let end = if let Some(end) = end {
         chronny::parse_datetime(end, Local::now()).ok_or(Error::InvalidDateTime(end.into()))?
     } else {
@@ -129,6 +130,7 @@ fn track(conn: &mut Connection,
         io::stdin().read_line(&mut s).unwrap();
         Local::now()
     };
+    println!("Ending at {}", start.format("%d/%m/%y %H:%M"));
 
     let tx = conn.transaction()?;
     tx.execute("INSERT INTO timeperiods(project_id, start, end, description) VALUES (?,?,?,?)",
@@ -137,7 +139,14 @@ fn track(conn: &mut Connection,
     {
         let mut stmnt = tx.prepare("INSERT INTO commits (sha, summary, project_id, timeperiod_id) \
                                     values(?,?,?,?)")?;
-        get_commits(&mut stmnt, proj_id, period_id, &start, &end)?;
+        match get_commits(&mut stmnt, proj_id, period_id, &start, &end) {
+            Ok(()) => {},
+            Err(Error::Git) => println!("Git either isn't installed or there is no repo in the \
+                                         current working directory. To associate commits with this \
+                                         project run `timmy git <project>` in a directory with a \
+                                         git repo."),
+            e => return e,
+        };
     }
     tx.commit()?;
     Ok(())
