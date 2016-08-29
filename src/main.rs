@@ -436,6 +436,21 @@ fn print_project_summary(conn: &mut Connection,
     Ok(())
 }
 
+fn print_program_usage(conn: &mut Connection, id: i64, total_time: Option<i64>) -> Result<(), Error> {
+    if let Some(total_time) = total_time {
+        let subtitle_style = Style::new().underline();
+        println!("{}", subtitle_style.paint("Program usage"));
+        let mut stmnt = conn.prepare("SELECT program, time FROM program_usage WHERE project_id=?")?;
+        let rows = stmnt.query_map(&[&id], |row| (row.get(0), row.get(1)))?;
+        for row in rows {
+            let (program, time): (String, i64) = row?;
+            println!("{}: {}", program, format_time(time as f64 / 60.0 / 60.0));
+        }
+        println!("");
+    }
+    Ok(())
+}
+
 fn project(conn: &mut Connection,
            name: &str,
            week: bool,
@@ -443,9 +458,10 @@ fn project(conn: &mut Connection,
            until: Option<&str>)
            -> Result<(), Error>
 {
-    let (id, customer, tags): (i64, Option<String>, Option<String>) =
-        conn.query_row("SELECT id, customer, group_concat(tag_name) FROM projects
-                        LEFT JOIN tags_projects_join ON project_id=projects.id
+    let (id, customer, tags, time): (i64, Option<String>, Option<String>, Option<i64>) =
+        conn.query_row("SELECT id, customer, group_concat(tag_name), SUM(time) FROM projects
+                        LEFT JOIN tags_projects_join ON tags_projects_join.project_id=projects.id
+                        LEFT JOIN program_usage ON program_usage.project_id=projects.id
                         WHERE name=?",
                        &[&name],
                        |row| {
@@ -453,9 +469,10 @@ fn project(conn: &mut Connection,
                            if let None = id {
                                return Err(Error::ProjectNotFound(name.into()));
                            }
-                           Ok((row.get(0), row.get(1), row.get(2)))
+                           Ok((row.get(0), row.get(1), row.get(2), row.get(3)))
                        })??;
     print_project_summary(conn, id, name, customer, tags)?;
+    print_program_usage(conn, id, time)?;
     print_activity(conn, id, week, since, until)
 }
 
