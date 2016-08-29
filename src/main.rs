@@ -185,7 +185,8 @@ fn track(conn: &mut Connection,
          name: &str,
          description: Option<&str>,
          start: Option<&str>,
-         end: Option<&str>) -> Result<(), Error> {
+         end: Option<&str>,
+         no_program: bool) -> Result<(), Error> {
     let proj_id = find_project(conn, name)?;
     let start = if let Some(start) = start {
         chronny::parse_datetime(start, Local::now()).ok_or(Error::InvalidDateTime(start.into()))?
@@ -205,7 +206,9 @@ fn track(conn: &mut Connection,
         tx.send(true);
         let mut times = HashMap::new();
         if let Some(handle) = handle {
-            times = handle.join().expect("couldn't join program tracker thread");
+            if !no_program {
+                times = handle.join().expect("couldn't join program tracker thread");
+            }
         }
         debug!("program times: {:?}", times);
         (Local::now(), times)
@@ -567,7 +570,11 @@ fn main() {
                  .long("end")
                  .help("When to end")
                  .takes_value(true)
-                 .requires("start")))
+                 .requires("start"))
+            .arg(Arg::with_name("no program")
+                 .short("n")
+                 .long("noprogram")
+                 .help("Don't track program usage")))
         .subcommand(SubCommand::with_name("git")
             .about("go through each time period and store the commits that happened during that \
                     time. timmy track automatically does this when you quit it for that \
@@ -624,7 +631,8 @@ fn main() {
               matches.value_of("PROJECT").unwrap(),
               matches.value_of("description"),
               matches.value_of("start"),
-              matches.value_of("end"))
+              matches.value_of("end"),
+              matches.is_present("no program"))
     } else if let Some(matches) = matches.subcommand_matches("git") {
         git(&mut conn, matches.value_of("PROJECT").unwrap())
     } else if let Some(matches) = matches.subcommand_matches("projects") {
