@@ -67,6 +67,7 @@ fn open_connection() -> Result<Connection, Error> {
                             summary       TEXT NOT NULL,
                             project_id    INTEGER NOT NULL,
                             timeperiod_id INTEGER NOT NULL);")?;
+    conn.execute("ALTER TABLE projects ADD COLUMN active BOOLEAN NOT NULL DEFAULT 1;", &[]);
     Ok(conn)
 }
 
@@ -97,6 +98,12 @@ fn create_project(conn: &mut Connection,
         }
     }
     tx.commit()?;
+    Ok(())
+}
+
+fn finish_project(conn: &mut Connection, name: &str) -> Result<(), Error> {
+    let proj_id = find_project(conn, name)?;
+    conn.execute("UPDATE projects SET active=0 WHERE id=?", &[&proj_id])?;
     Ok(())
 }
 
@@ -225,19 +232,27 @@ fn git(conn: &mut Connection, project: &str) -> Result<(), Error> {
     Ok(())
 }
 
-fn projects(conn: &mut Connection) -> Result<(), Error> {
-    let mut projects_stmnt =
-        conn.prepare("SELECT name, customer, group_concat(tag_name) FROM projects
+fn projects(conn: &mut Connection, all: bool) -> Result<(), Error> {
+    let mut projects_stmnt = if all {
+        conn.prepare("SELECT name, customer, group_concat(tag_name), active FROM projects
                       LEFT JOIN tags_projects_join on project_id=projects.id
-                      GROUP BY id;")?;
+                      GROUP BY id;")?
+    } else {
+        conn.prepare("SELECT name, customer, group_concat(tag_name), active FROM projects
+                      LEFT JOIN tags_projects_join on project_id=projects.id
+                      WHERE active=1
+                      GROUP BY id;")?
+    };
     let rows =
-        projects_stmnt.query_map(&[], |row| (row.get(0), row.get(1), row.get(2)))?;
-    let mut table = Table::with_headers(vec!["Name".into(), "Customer".into(), "Tags".into()]);
+        projects_stmnt.query_map(&[], |row| (row.get(0), row.get(1), row.get(2), row.get(3)))?;
+    let mut headers = vec!["Name".into(), "Customer".into(), "Tags".into()];
+    if all { headers.push("Active".into()); }
+    let mut table = Table::with_headers(headers);
     for row in rows {
-        let (name, customer, tags): (String, Option<String>, Option<String>) = row?;
-        table.add_simple(vec![name,
-                              customer.unwrap_or("".into()),
-                              tags.unwrap_or("".into())]);
+        let (name, customer, tags, active): (String, Option<String>, Option<String>, bool) = row?;
+        let mut row = vec![name, customer.unwrap_or("".into()), tags.unwrap_or("".into())];
+        if all { row.push(format!("{}", active)); }
+        table.add_simple(row);
     }
     table.add_border_bottom();
     table.print();
@@ -450,6 +465,11 @@ fn main() {
                 .long("tags")
                 .help("comma separated list of tags")
                 .takes_value(true)))
+        .subcommand(SubCommand::with_name("finish")
+           .about("Makes a project inactive")
+            .arg(Arg::with_name("NAME")
+                    .help("the project name")
+                    .required(true)))
         .subcommand(SubCommand::with_name("track")
             .about("Start tracking a time period")
             .arg(Arg::with_name("PROJECT")
@@ -479,7 +499,12 @@ fn main() {
             .arg(Arg::with_name("PROJECT")
                 .help("the project to assign the commits to")
                 .required(true)))
-        .subcommand(SubCommand::with_name("projects").about("List the projects"))
+        .subcommand(SubCommand::with_name("projects")
+            .about("List the projects")
+            .arg(Arg::with_name("all")
+                .help("Show all projects, including inactive ones")
+                .short("a")
+                .long("all")))
         .subcommand(SubCommand::with_name("project")
             .about("Show a project")
             .arg(Arg::with_name("NAME")
@@ -515,6 +540,8 @@ fn main() {
                        matches.value_of("NAME").unwrap(),
                        matches.value_of("customer"),
                        matches.value_of("tags").unwrap_or("".into()))
+    } else if let Some(matches) = matches.subcommand_matches("finish") {
+        finish_project(&mut conn, matches.value_of("NAME").unwrap())
     } else if let Some(matches) = matches.subcommand_matches("track") {
         track(&mut conn,
               matches.value_of("PROJECT").unwrap(),
@@ -523,8 +550,8 @@ fn main() {
               matches.value_of("end"))
     } else if let Some(matches) = matches.subcommand_matches("git") {
         git(&mut conn, matches.value_of("PROJECT").unwrap())
-    } else if let Some(_) = matches.subcommand_matches("projects") {
-        projects(&mut conn)
+    } else if let Some(matches) = matches.subcommand_matches("projects") {
+        projects(&mut conn, matches.is_present("all"))
     } else if let Some(matches) = matches.subcommand_matches("project") {
         project(&mut conn,
                 matches.value_of("NAME").unwrap(),
