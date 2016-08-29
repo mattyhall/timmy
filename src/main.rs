@@ -10,13 +10,18 @@ extern crate clap;
 extern crate rusqlite;
 extern crate chrono;
 extern crate ansi_term;
+extern crate regex;
 
-use std::{fs, env, io};
+use std::{fs, env, io, time, thread};
+use std::process::Stdio;
+use std::collections::HashMap;
+use std::sync::mpsc::{Receiver, channel};
 use std::path::Path;
 use std::convert::From;
 use std::process::Command;
 use clap::{Arg, App, SubCommand};
 use rusqlite::{Connection, Statement, Transaction};
+use regex::Regex;
 use chrono::*;
 use ansi_term::Style;
 use timmy::tables::*;
@@ -67,7 +72,13 @@ fn open_connection() -> Result<Connection, Error> {
                             sha           TEXT NOT NULL UNIQUE,
                             summary       TEXT NOT NULL,
                             project_id    INTEGER NOT NULL,
-                            timeperiod_id INTEGER NOT NULL);")?;
+                            timeperiod_id INTEGER NOT NULL);
+
+                       CREATE TABLE IF NOT EXISTS program_usage (
+                            project_id    INTEGER NOT NULL,
+                            program       TEXT NOT NULL,
+                            time          INTEGER NOT NULL);")?;
+
     conn.execute("ALTER TABLE projects ADD COLUMN active BOOLEAN NOT NULL DEFAULT 1;", &[]);
     Ok(conn)
 }
@@ -123,6 +134,53 @@ fn find_project(conn: &mut Connection, name: &str) -> Result<i64, Error> {
     }
 }
 
+fn get_current_program() -> String {
+    let cmd_str = "xprop -root _NET_ACTIVE_WINDOW | awk -F ' ' '{print $5}' | \
+                   xargs xprop -id | grep _NET_WM_PID | awk -F ' ' '{print $3}' | \
+                   xargs ps -o comm= -p";
+    // Get the X id for the currently displayed window
+    let output = Command::new("xprop").args(&["-root", "_NET_ACTIVE_WINDOW"]).output().unwrap();
+    // parse: _NET_ACTIVE_WINDOW(WINDOW): window id # 0x3e0000a
+    let output = String::from_utf8_lossy(&output.stdout);
+    let win_id = output.split(' ').last().unwrap();
+    // Get the pid
+    let output = Command::new("xprop").args(&["-id", &format!("{}", win_id)]).output().unwrap();
+    let output = String::from_utf8_lossy(&output.stdout);
+    let regex = Regex::new(r"_NET_WM_PID\(CARDINAL\) = (\d+)").unwrap();
+    let caps = regex.captures(&output).unwrap();
+    let pid = caps.at(1).unwrap();
+    let output = Command::new("ps").args(&["-ocomm=", &format!("-p{}", pid)]).output().unwrap();
+    String::from_utf8_lossy(&output.stdout).into_owned()
+}
+
+fn program_tracker_thread(rx: Receiver<bool>)
+                          -> Option<thread::JoinHandle<HashMap<String, i64>>>
+{
+    let status = Command::new("xprop").arg("-root").stdout(Stdio::null()).status();
+    match status {
+        Ok(_) => {},
+        Err(_) => return None
+    }
+    let handle = thread::spawn(move || {
+        let mut hm = HashMap::new();
+        let mut current_program = get_current_program().trim().into();
+        let mut program_change_time = Local::now();
+        while rx.try_recv().is_err() {
+            let new_program = get_current_program().trim().into();
+            if new_program != current_program {
+                let diff = Local::now() - program_change_time;
+                program_change_time = Local::now();
+                let counter = hm.entry(current_program).or_insert(0);
+                *counter += diff.num_seconds();
+                current_program = new_program;
+            }
+            thread::sleep(time::Duration::from_millis(100));
+        }
+        return hm;
+    });
+    Some(handle)
+}
+
 fn track(conn: &mut Connection,
          name: &str,
          description: Option<&str>,
@@ -135,13 +193,22 @@ fn track(conn: &mut Connection,
         Local::now()
     };
     println!("Starting at {}", start.format("%d/%m/%y %H:%M"));
-    let end = if let Some(end) = end {
-        chronny::parse_datetime(end, Local::now()).ok_or(Error::InvalidDateTime(end.into()))?
+    let (end, times) = if let Some(end) = end {
+        (chronny::parse_datetime(end, Local::now()).ok_or(Error::InvalidDateTime(end.into()))?,
+         HashMap::new())
     } else {
+        let (tx, rx) = channel();
+        let handle = program_tracker_thread(rx);
         println!("When you are finished with the task press ENTER");
         let mut s = String::new();
         io::stdin().read_line(&mut s).unwrap();
-        Local::now()
+        tx.send(true);
+        let mut times = HashMap::new();
+        if let Some(handle) = handle {
+            times = handle.join().expect("couldn't join program tracker thread");
+        }
+        debug!("program times: {:?}", times);
+        (Local::now(), times)
     };
     println!("Ending at {}", start.format("%d/%m/%y %H:%M"));
 
@@ -160,6 +227,10 @@ fn track(conn: &mut Connection,
                                          git repo."),
             e => return e,
         };
+        let mut stmnt = tx.prepare("INSERT OR REPLACE INTO program_usage(project_id, program, time) VALUES (?,?,?)")?;
+        for (program, time) in &times {
+            stmnt.execute(&[&proj_id, program, time])?;
+        }
     }
     tx.commit()?;
     Ok(())
