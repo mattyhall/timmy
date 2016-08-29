@@ -25,6 +25,7 @@ use timmy::chronny;
 #[derive(Debug)]
 enum Error {
     ProjectNotFound(String),
+    ProjectAlreadyExists(String),
     Sqlite(rusqlite::Error),
     Git,
     InvalidDateTime(String),
@@ -88,13 +89,18 @@ fn create_project(conn: &mut Connection,
                   customer: Option<&str>,
                   tags: &str)
                   -> Result<(), Error> {
+    match find_project(conn, name) {
+        Ok(_) => return Err(Error::ProjectAlreadyExists(name.into())),
+        _ => {},
+    };
     let tx = conn.transaction()?;
-    let proj_id = tx.execute("INSERT INTO projects(name, customer) VALUES (?,?)",
-                 &[&name, &customer])?;
+    tx.execute("INSERT INTO projects(name, customer) VALUES (?,?)",
+               &[&name, &customer])?;
+    let proj_id = tx.last_insert_rowid();
     if tags != "" {
         for tag in tags.split(',') {
             tx.execute("INSERT INTO tags_projects_join VALUES (?, ?)",
-                         &[&tag, &proj_id])?;
+                         &[&tag, &proj_id]);
         }
     }
     tx.commit()?;
@@ -570,6 +576,7 @@ fn main() {
     match res {
         Ok(()) => {}
         Err(Error::ProjectNotFound(p)) => println!("Project {} not found", p),
+        Err(Error::ProjectAlreadyExists(p)) => println!("Project {} already exists", p),
         Err(Error::Git) => println!("No git repository found"),
         Err(Error::Sqlite(e)) => {
             println!("There was a problem with the database");
