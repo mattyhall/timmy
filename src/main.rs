@@ -227,9 +227,15 @@ fn track(conn: &mut Connection,
                                          git repo."),
             e => return e,
         };
-        let mut stmnt = tx.prepare("INSERT OR REPLACE INTO program_usage(project_id, program, time) VALUES (?,?,?)")?;
+        let mut stmnt = tx.prepare("INSERT INTO program_usage(project_id, program, time) VALUES (?,?,?)")?;
         for (program, time) in &times {
-            stmnt.execute(&[&proj_id, program, time])?;
+            let old_time: i64 = tx.query_row("SELECT time FROM program_usage WHERE project_id=? AND program=?",
+                                             &[&proj_id, program],
+                                             |row| row.get(0))
+                                  .unwrap_or(0);
+            tx.execute("DELETE FROM program_usage WHERE project_id=? AND program=?", &[&proj_id, program])?;
+            let time = time + old_time;
+            stmnt.execute(&[&proj_id, program, &time])?;
         }
     }
     tx.commit()?;
