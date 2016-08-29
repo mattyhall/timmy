@@ -20,7 +20,7 @@ use std::path::Path;
 use std::convert::From;
 use std::process::Command;
 use clap::{Arg, App, SubCommand};
-use rusqlite::{Connection, Statement, Transaction};
+use rusqlite::{Connection, Statement};
 use regex::Regex;
 use chrono::*;
 use ansi_term::Style;
@@ -79,7 +79,7 @@ fn open_connection() -> Result<Connection, Error> {
                             program       TEXT NOT NULL,
                             time          INTEGER NOT NULL);")?;
 
-    conn.execute("ALTER TABLE projects ADD COLUMN active BOOLEAN NOT NULL DEFAULT 1;", &[]);
+    let _ = conn.execute("ALTER TABLE projects ADD COLUMN active BOOLEAN NOT NULL DEFAULT 1;", &[]);
     Ok(conn)
 }
 
@@ -110,8 +110,8 @@ fn create_project(conn: &mut Connection,
     let proj_id = tx.last_insert_rowid();
     if tags != "" {
         for tag in tags.split(',') {
-            tx.execute("INSERT INTO tags_projects_join VALUES (?, ?)",
-                         &[&tag, &proj_id]);
+            let _ = tx.execute("INSERT INTO tags_projects_join VALUES (?, ?)",
+                               &[&tag, &proj_id]);
         }
     }
     tx.commit()?;
@@ -135,9 +135,6 @@ fn find_project(conn: &mut Connection, name: &str) -> Result<i64, Error> {
 }
 
 fn get_current_program() -> String {
-    let cmd_str = "xprop -root _NET_ACTIVE_WINDOW | awk -F ' ' '{print $5}' | \
-                   xargs xprop -id | grep _NET_WM_PID | awk -F ' ' '{print $3}' | \
-                   xargs ps -o comm= -p";
     // Get the X id for the currently displayed window
     let output = Command::new("xprop").args(&["-root", "_NET_ACTIVE_WINDOW"]).output().unwrap();
     // parse: _NET_ACTIVE_WINDOW(WINDOW): window id # 0x3e0000a
@@ -203,7 +200,7 @@ fn track(conn: &mut Connection,
         println!("When you are finished with the task press ENTER");
         let mut s = String::new();
         io::stdin().read_line(&mut s).unwrap();
-        tx.send(true);
+        let _ = tx.send(true);
         let mut times = HashMap::new();
         if let Some(handle) = handle {
             if !no_program {
