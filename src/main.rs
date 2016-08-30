@@ -214,7 +214,7 @@ fn track(conn: &mut Connection,
         debug!("program times: {:?}", times);
         (Local::now(), times)
     };
-    println!("Ending at {}", start.format("%d/%m/%y %H:%M"));
+    println!("Ending at {}", end.format("%d/%m/%y %H:%M"));
 
     let tx = conn.transaction()?;
     tx.execute("INSERT INTO timeperiods(project_id, start, end, description) VALUES (?,?,?,?)",
