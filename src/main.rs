@@ -455,10 +455,13 @@ fn print_program_usage(conn: &mut Connection, id: i64, total_time: Option<i64>) 
     if let Some(total_time) = total_time {
         let subtitle_style = Style::new().underline();
         println!("{}", subtitle_style.paint("Program usage"));
-        let mut stmnt = conn.prepare("SELECT program, time FROM program_usage WHERE project_id=?")?;
+        let mut stmnt = conn.prepare("SELECT program, time FROM program_usage WHERE project_id=? ORDER BY time DESC")?;
         let rows = stmnt.query_map(&[&id], |row| (row.get(0), row.get(1)))?;
         for row in rows {
             let (program, time): (String, i64) = row?;
+            if time == 0 {
+                continue;
+            }
             let pc: f32 = (time as f32) / (total_time as f32) * 100f32;
             debug!("pc, time, total_time: {} {} {}", pc, time, total_time);
             println!("{:>5.2}% {}", pc, program);
