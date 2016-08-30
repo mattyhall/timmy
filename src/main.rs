@@ -475,7 +475,8 @@ fn project(conn: &mut Connection,
            name: &str,
            week: bool,
            since: Option<&str>,
-           until: Option<&str>)
+           until: Option<&str>,
+           short: bool)
            -> Result<(), Error>
 {
     let (id, customer, tags, time): (i64, Option<String>, Option<String>, Option<i64>) =
@@ -494,7 +495,10 @@ fn project(conn: &mut Connection,
                        })??;
     print_project_summary(conn, id, name, customer, tags)?;
     print_program_usage(conn, id, time)?;
-    print_activity(conn, id, week, since, until)
+    if !short {
+        print_activity(conn, id, week, since, until)?;
+    }
+    Ok(())
 }
 
 fn weeks(conn: &mut Connection, name: &str) -> Result<(), Error> {
@@ -644,17 +648,22 @@ fn main() {
                  .short("s")
                  .long("since")
                  .help("the date and time from which to show activity")
-                 .takes_value(true))
+                 .takes_value(true)
+                 .conflicts_with("short"))
             .arg(Arg::with_name("until")
                  .short("u")
                  .long("until")
                  .help("the date and time until which to show activity")
-                 .takes_value(true))
+                 .takes_value(true)
+                 .conflicts_with("short"))
             .arg(Arg::with_name("week")
                  .short("w")
                  .long("week")
                  .help("show activity in the past week")
-                 .conflicts_with_all(&["since", "until"])))
+                 .conflicts_with_all(&["since", "until"]))
+            .arg(Arg::with_name("short")
+                 .long("short")
+                 .help("omit the recent activity")))
         .subcommand(SubCommand::with_name("weeks")
             .about("show time spent per week")
             .arg(Arg::with_name("PROJECT")
@@ -690,7 +699,8 @@ fn main() {
                 matches.value_of("NAME").unwrap(),
                 matches.is_present("week"),
                 matches.value_of("since"),
-                matches.value_of("until"))
+                matches.value_of("until"),
+                matches.is_present("short"))
     } else if let Some(matches) = matches.subcommand_matches("weeks") {
         if matches.is_present("short") {
             short_weeks(&mut conn, matches.value_of("PROJECT").unwrap())
