@@ -452,6 +452,7 @@ fn print_program_usage(conn: &mut Connection, id: i64, total_time: Option<i64>) 
         for row in rows {
             let (program, time): (String, i64) = row?;
             let pc: f32 = (time as f32) / (total_time as f32) * 100f32;
+            debug!("pc, time, total_time: {} {} {}", pc, time, total_time);
             println!("{:>5.2}% {}", pc, program);
         }
         println!("");
@@ -467,9 +468,10 @@ fn project(conn: &mut Connection,
            -> Result<(), Error>
 {
     let (id, customer, tags, time): (i64, Option<String>, Option<String>, Option<i64>) =
-        conn.query_row("SELECT id, customer, group_concat(tag_name), SUM(time) FROM projects
+        conn.query_row("SELECT id, customer, group_concat(tag_name),
+                               (SELECT SUM(time) FROM program_usage WHERE project_id=id)
+                        FROM projects
                         LEFT JOIN tags_projects_join ON tags_projects_join.project_id=projects.id
-                        LEFT JOIN program_usage ON program_usage.project_id=projects.id
                         WHERE name=?",
                        &[&name],
                        |row| {
