@@ -119,10 +119,18 @@ fn create_project(conn: &mut Connection,
     Ok(())
 }
 
-fn finish_project(conn: &mut Connection, name: &str) -> Result<(), Error> {
+fn change_project_status(conn: &mut Connection, name: &str, activity: bool) -> Result<(), Error> {
     let (proj_id, _) = find_project(conn, name)?;
-    conn.execute("UPDATE projects SET active=0 WHERE id=?", &[&proj_id])?;
+    conn.execute("UPDATE projects SET active=? WHERE id=?", &[&activity, &proj_id])?;
     Ok(())
+}
+
+fn finish_project(conn: &mut Connection, name: &str) -> Result<(), Error> {
+    change_project_status(conn, name, false)
+}
+
+fn restart_project(conn: &mut Connection, name: &str) -> Result<(), Error> {
+    change_project_status(conn, name, true)
 }
 
 fn find_project(conn: &mut Connection, name: &str) -> Result<(i64, bool), Error> {
@@ -576,7 +584,12 @@ fn main() {
                 .help("comma separated list of tags")
                 .takes_value(true)))
         .subcommand(SubCommand::with_name("finish")
-           .about("Makes a project inactive")
+            .about("Makes a project inactive")
+            .arg(Arg::with_name("NAME")
+                    .help("the project name")
+                    .required(true)))
+        .subcommand(SubCommand::with_name("restart")
+            .about("Reactivates a project")
             .arg(Arg::with_name("NAME")
                     .help("the project name")
                     .required(true)))
@@ -656,6 +669,8 @@ fn main() {
                        matches.value_of("tags").unwrap_or("".into()))
     } else if let Some(matches) = matches.subcommand_matches("finish") {
         finish_project(&mut conn, matches.value_of("NAME").unwrap())
+    } else if let Some(matches) = matches.subcommand_matches("restart") {
+        restart_project(&mut conn, matches.value_of("NAME").unwrap())
     } else if let Some(matches) = matches.subcommand_matches("track") {
         track(&mut conn,
               matches.value_of("PROJECT").unwrap(),
