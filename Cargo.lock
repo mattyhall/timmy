@@ -6,6 +6,7 @@ dependencies = [
  "chrono 0.2.25 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 2.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
+ "lazy_static 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.3.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "regex 0.1.73 (registry+https://github.com/rust-lang/crates.io-index)",
  "rusqlite 0.7.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -72,6 +73,11 @@ dependencies = [
  "winapi 0.2.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "winapi-build 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
+
+[[package]]
+name = "lazy_static"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "libc"
@@ -258,6 +264,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum clap 2.11.0 (registry+https://github.com/rust-lang/crates.io-index)" = "62db8e9e3ab6792670f99338be3dbc416f8728ba5d874c33e27aa9933e534512"
 "checksum env_logger 0.3.4 (registry+https://github.com/rust-lang/crates.io-index)" = "82dcb9ceed3868a03b335657b85a159736c961900f7e7747d3b0b97b9ccb5ccb"
 "checksum kernel32-sys 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "7507624b29483431c0ba2d82aece8ca6cdba9382bff4ddd0f7490560c056098d"
+"checksum lazy_static 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "49247ec2a285bb3dcb23cbd9c35193c025e7251bfce77c1d5da97e6362dffe7f"
 "checksum libc 0.2.15 (registry+https://github.com/rust-lang/crates.io-index)" = "23e3757828fa702a20072c37ff47938e9dd331b92fac6e223d26d4b7a55f7ee2"
 "checksum libsqlite3-sys 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)" = "663508cb9c1e23363aea1a8b1f7d6340394ebc3bc3a6daebfb9cc99b8feaf2ec"
 "checksum linked-hash-map 0.0.9 (registry+https://github.com/rust-lang/crates.io-index)" = "83f7ff3baae999fdf921cccf54b61842bb3b26868d50d02dff48052ebec8dd79"

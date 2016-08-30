@@ -6,6 +6,9 @@ extern crate timmy;
 extern crate log;
 extern crate env_logger;
 
+#[macro_use]
+extern crate lazy_static;
+
 extern crate clap;
 extern crate rusqlite;
 extern crate chrono;
@@ -152,8 +155,10 @@ fn get_current_program() -> String {
     // Get the pid
     let output = Command::new("xprop").args(&["-id", &format!("{}", win_id)]).output().unwrap();
     let output = String::from_utf8_lossy(&output.stdout);
-    let regex = Regex::new(r"_NET_WM_PID\(CARDINAL\) = (\d+)").unwrap();
-    let caps = regex.captures(&output).unwrap();
+    lazy_static! {
+        static ref REGEX: Regex = Regex::new(r"_NET_WM_PID\(CARDINAL\) = (\d+)").unwrap();
+    }
+    let caps = REGEX.captures(&output).unwrap();
     let pid = caps.at(1).unwrap();
     let output = Command::new("ps").args(&["-ocomm=", &format!("-p{}", pid)]).output().unwrap();
     String::from_utf8_lossy(&output.stdout).into_owned()
