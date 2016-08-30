@@ -37,7 +37,7 @@ matt@box:~/$ # Starting time and end
 matt@box:~/$ timmy track <project> -s "12:00" -e "13:00"
 ```
 
-At the end of a session timmy will automatically look for any git commits in the repo in the current directory. If you edit history (eg. reverting a commit) you can run:
+Timmy will monitor what programs you are using, this can be disabled by passing `-n`. At the end of a session timmy will automatically look for any git commits in the repo in the current directory. If you edit history (eg. reverting a commit) you can run:
 
 ```
 matt@box:~/$ timmy git <project>
@@ -52,6 +52,10 @@ matt@box:~/$ timmy project timmy
 timmy
 Tags: rust,cli
 Total time spent: 14hrs 31mins
+
+Program usage
+98.97% emacs
+ 1.03% gnome-terminal-
 
 Activity
 Thu 25 August 2016 17:55-18:02 6mins
@@ -138,6 +142,10 @@ timmy
 Tags: rust,cli
 Total time spent: 14hrs 31mins
 
+Program usage
+98.97% emacs
+ 1.03% gnome-terminal-
+
 Activity
 Wed 24 August 2016 14:09-14:30 21mins
     * Add start and end options to track
@@ -166,6 +174,10 @@ matt@box:~/$ timmy project timmy -s "yesterday 12:00"
 timmy 
 Tags: rust,cli
 Total time spent: 14hrs 31mins
+
+Program usage
+98.97% emacs
+ 1.03% gnome-terminal-
 
 Activity
 Thu 25 August 2016 17:55-18:02 6mins

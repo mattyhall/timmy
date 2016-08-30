@@ -444,7 +444,8 @@ fn print_program_usage(conn: &mut Connection, id: i64, total_time: Option<i64>) 
         let rows = stmnt.query_map(&[&id], |row| (row.get(0), row.get(1)))?;
         for row in rows {
             let (program, time): (String, i64) = row?;
-            println!("{}: {}", program, format_time(time as f64 / 60.0 / 60.0));
+            let pc: f32 = (time as f32) / (total_time as f32) * 100f32;
+            println!("{:>5.2}% {}", pc, program);
         }
         println!("");
     }
