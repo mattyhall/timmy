@@ -34,6 +34,7 @@ enum Error {
     Sqlite(rusqlite::Error),
     Git,
     InvalidDateTime(String),
+    InactiveProject(String),
 }
 
 impl From<rusqlite::Error> for Error {
@@ -119,16 +120,16 @@ fn create_project(conn: &mut Connection,
 }
 
 fn finish_project(conn: &mut Connection, name: &str) -> Result<(), Error> {
-    let proj_id = find_project(conn, name)?;
+    let (proj_id, _) = find_project(conn, name)?;
     conn.execute("UPDATE projects SET active=0 WHERE id=?", &[&proj_id])?;
     Ok(())
 }
 
-fn find_project(conn: &mut Connection, name: &str) -> Result<i64, Error> {
-    match conn.query_row("SELECT id FROM projects WHERE name=?",
+fn find_project(conn: &mut Connection, name: &str) -> Result<(i64, bool), Error> {
+    match conn.query_row("SELECT id, active FROM projects WHERE name=?",
                          &[&name],
-                         |row| row.get(0)) {
-        Ok(id) => Ok(id),
+                         |row| (row.get(0), row.get(1))) {
+        Ok((id, active)) => Ok((id, active)),
         Err(rusqlite::Error::QueryReturnedNoRows) => Err(Error::ProjectNotFound(name.into())),
         Err(e) => Err(Error::from(e)),
     }
@@ -184,7 +185,10 @@ fn track(conn: &mut Connection,
          start: Option<&str>,
          end: Option<&str>,
          no_program: bool) -> Result<(), Error> {
-    let proj_id = find_project(conn, name)?;
+    let (proj_id, active) = find_project(conn, name)?;
+    if !active {
+        return Err(Error::InactiveProject(name.into()));
+    }
     let start = if let Some(start) = start {
         chronny::parse_datetime(start, Local::now()).ok_or(Error::InvalidDateTime(start.into()))?
     } else {
@@ -291,7 +295,10 @@ fn get_commits(insert_stmnt: &mut Statement, proj_id: i64, period_id: i64, start
 }
 
 fn git(conn: &mut Connection, project: &str) -> Result<(), Error> {
-    let proj_id = find_project(conn, project)?;
+    let (proj_id, active) = find_project(conn, project)?;
+    if !active {
+        return Err(Error::InactiveProject(project.into()));
+    }
     let tx = conn.transaction()?;
 
     tx.execute("DELETE FROM commits WHERE project_id=?", &[&proj_id])?;
@@ -478,7 +485,7 @@ fn project(conn: &mut Connection,
 }
 
 fn weeks(conn: &mut Connection, name: &str) -> Result<(), Error> {
-    let project_id = find_project(conn, name)?;
+    let (project_id, _) = find_project(conn, name)?;
     let mut day_stmnt =
         conn.prepare("SELECT start,
                              SUM(CAST((julianday(end)-julianday(start))*24 AS REAL))
@@ -524,7 +531,7 @@ fn weeks(conn: &mut Connection, name: &str) -> Result<(), Error> {
 }
 
 fn short_weeks(conn: &mut Connection, name: &str) -> Result<(), Error> {
-    let project_id = find_project(conn, name)?;
+    let (project_id, _) = find_project(conn, name)?;
     let mut weeks_stmnt =
         conn.prepare("SELECT start,
                              SUM(CAST((julianday(end)-julianday(start))*24 AS REAL))
@@ -683,5 +690,6 @@ fn main() {
             debug!("{:?}", e);
         },
         Err(Error::InvalidDateTime(s)) => println!("Could not parse {}", s),
+        Err(Error::InactiveProject(p)) => println!("Project {} is inactive", p),
     }
 }
